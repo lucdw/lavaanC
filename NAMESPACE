@@ -1,0 +1,4 @@
+useDynLib(lavaanC, .registration = TRUE)
+
+# export ordinary functions defined in this package
+export("lav_parse_model_string_c")

@@ -1,0 +1,20 @@
+Package: lavaanC
+Type: Package
+Title: Deliver Routines for lavaan written in C 
+Version: 0.1.0
+Authors@R: c(person(given   = "Yves", family = "Rosseel",
+                    role    = c("aut", "cre"),
+                    email   = "Yves.Rosseel@UGent.be",
+                    comment = c(ORCID = "0000-0002-4129-4477")),
+             person(given = "Luc", family = "De Wilde",
+                    role = "aut",
+                    email = "Luc.DeWilde@UGent.be"))
+Maintainer: Luc De Wilde <luc.dewilde@ugent.be>
+Description: Some routines in lavaan can be done faster in C.
+    This package allows functions in lavaan to choose between the R versions of
+    the routine or a version written in C, whithout having C code in lavaan itself.
+Depends: R(>= 3.4)
+License: GPL (>= 2)
+Encoding: UTF-8
+LazyData: true
+NeedsCompilation: yes
