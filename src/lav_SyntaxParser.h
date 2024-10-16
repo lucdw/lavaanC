@@ -66,6 +66,7 @@ typedef parsresult* parsresultp;
 #define SPE_ILLNUMLIT  (int)21      /* illegal numeric literal(e.g. 23.0ea34) */
 #define SPE_EMPTYMODEL (int)22      /* model is empty */
 #define SPE_FORMUL1 (int)23         /* model contains formule with only 1 token */
+#define SPE_ILLCHAR (int)24         /* model contains illegal character (not used in C program) */
 #define SPE_NOOPERATOR (int)31      /* formula without valid lavaan operator */
 #define SPE_PARENTHESES (int)32     /* formula with left and right parentheses not matching */
 #define SPE_3WAYINTERACTION (int)33 /* Three - way or higher - order interaction terms */
@@ -77,7 +78,7 @@ typedef parsresult* parsresultp;
 #define SPE_MODNOSTR (int)46        /* modifier token must be string literal */
 #define SPE_INVALIDBLOCK (int)47    /* invalid block specification */
 #define SPE_INVALIDLAST (int)48     /* last element of mono-formule invalid (should be identifier or numeric (for regression or measure)) */
-
+#define SPE_INVALIDMODSMB (int)49   /* invalid modifier symbol (should be '*' or '?') */
 #define SPE_INVALIDEXPR (int)50     /* invalid expression (only detectable in calling program) */
 #define SPE_INVALIDEXPRTYP (int)51  /* invalid type for expression (only detectable in calling program) */
 
