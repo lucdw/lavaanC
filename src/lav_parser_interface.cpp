@@ -288,7 +288,7 @@ SEXP lav_parse_interface(SEXP model) {
   int modi = 0;
   int numericpossible;
   fl = resultaat.flat;
-  do {
+  while (fl != NULL) {
     if (fl->modifiers != NULL) {
       // count number of modifiers to include
       int modif1count = 0;
@@ -419,7 +419,7 @@ SEXP lav_parse_interface(SEXP model) {
     INTEGER(block)[flati] = fl->block;
     flati++;
     fl = fl->next;
-  } while (fl != NULL);
+  };
 
   /* fill constraints */
   int constri = 0;
