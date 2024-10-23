@@ -26,7 +26,7 @@ typedef struct TokenLL {
 	tokenp first;
 	tokenp last;
 } TokenLL;
-#define NEW_TOKENLL {(void *)0, (void *)0}
+#define NEW_TOKENLL {(tokenp)0, (tokenp)0}
 
 typedef struct mftoken {
 	struct mftoken* next;
@@ -39,7 +39,7 @@ typedef mftoken* mftokenp;
 typedef struct MonoFormule {
 	mftokenp first;
 	mftokenp last;
-	mftokenp operator;
+	mftokenp lavoperator;
 } MonoFormule;
 #define NEW_MF {(void *)0, (void *)0, (void *)0}
 
@@ -85,7 +85,7 @@ static void lav_warn_init(void) {
 * errorcode, possibly SPE_MALLOC
 */
 static int lav_warn_add(int warncode, int warnpos) {
-	warnp newone = malloc(sizeof(warnelem));
+	warnp newone = (warnp)malloc(sizeof(warnelem));
 	if (newone == NULL) return (SPE_MALLOC << 24) + __LINE__;
 	newone->next = NULL;
 	newone->warncode = warncode;
@@ -113,7 +113,7 @@ static int lav_warn_add(int warncode, int warnpos) {
 */
 static int lav_token_add(TokenLL* tokens, int position, int length, tokentype tt) {
 	assert(length >= 0);
-	tokenp newone = malloc(sizeof(token));
+	tokenp newone = (tokenp)malloc(sizeof(token));
 	if (newone != NULL) {
 		newone->pos = position;
 		newone->len = length;
@@ -148,7 +148,7 @@ static int lav_token_add(TokenLL* tokens, int position, int length, tokentype tt
 static int lav_setnewtekst(tokenp tok, const char* text) {
 	free(tok->tekst);
 	size_t textlen = strlen(text);
-	tok->tekst = malloc(textlen + 1);
+	tok->tekst = (char *)malloc(textlen + 1);
 	if (tok->tekst != NULL) {
 		strcpy(tok->tekst, text);
 		return 0;
@@ -168,7 +168,7 @@ static int lav_setnewtekst(tokenp tok, const char* text) {
 */
 static int lav_settekst(tokenp tok, const char* modelsrc) {
 	free(tok->tekst);
-	tok->tekst = malloc((size_t)tok->len + 1);
+	tok->tekst = (char *)malloc((size_t)tok->len + 1);
 	if (tok->tekst != NULL) {
 		strncpy(tok->tekst, modelsrc + tok->pos, tok->len);
 		tok->tekst[tok->len] = 0;
@@ -247,12 +247,12 @@ static void lav_CheckTokens(TokenLL* tokens) {
 */
 static int lav_mftoken_insert(MonoFormule* mf, mftokenp where, int position, char* text, tokentype tt) {
 	assert(mf->first != NULL || where == NULL);
-	mftokenp newone = malloc(sizeof(mftoken));
+	mftokenp newone = (mftokenp)malloc(sizeof(mftoken));
 	if (newone != NULL) {
 		newone->pos = position;
 		newone->typ = tt;
 		newone->tekst = text;
-		if (tt == T_LAVAANOPERATOR) mf->operator = newone;
+		if (tt == T_LAVAANOPERATOR) mf->lavoperator = newone;
 		if (mf->first == NULL) {
 			newone->next = NULL;
 			newone->prior = NULL;
@@ -299,7 +299,7 @@ static int lav_mftoken_insert(MonoFormule* mf, mftokenp where, int position, cha
 * 2. the function does NOT check that the mftoken is in the list !
 */
 static void lav_mftoken_remove(MonoFormule* mf, mftokenp which) {
-	if (mf->operator == which) mf->operator = NULL;
+	if (mf->lavoperator == which) mf->lavoperator = NULL;
 	if (mf->first == which && mf->last == which) {
 		mf->first = NULL;
 		mf->last = NULL;
@@ -334,7 +334,7 @@ static void lav_MonoFormule_free(MonoFormule* mf) {
 static void lav_CheckMfTokens(MonoFormule* mf) {
 #ifdef _DEBUG
 	if (mf->first == NULL && mf->last == NULL) return;
-	assert(mf->operator != NULL);
+	assert(mf->lavoperator != NULL);
 	assert((mf->first == NULL) == (mf->last == NULL));
 	for (mftokenp curtok = mf->first; curtok->next != NULL; curtok = curtok->next) {
 		assert(curtok->next->prior == curtok);
@@ -374,7 +374,7 @@ static void lav_var_free(varvec* vv) {
 static int lav_var_add(varvec* vv, double value, const char* text, char typ, int pos) {
 	if (vv->capacity == vv->length) {
 		vv->capacity = (vv->length == 0) ? 1 : vv->capacity << 1;
-		var1* tmp = calloc(vv->capacity, sizeof(var1));
+		var1* tmp = (var1 *)calloc(vv->capacity, sizeof(var1));
 		if (tmp == NULL) return (SPE_MALLOC << 24) + __LINE__;
 		if (vv->length) {
 			memcpy(tmp, vv->varvecarr, vv->length * sizeof(var1));
@@ -387,7 +387,7 @@ static int lav_var_add(varvec* vv, double value, const char* text, char typ, int
 	var1tmp->varpos = pos;
 	if (typ & 2) {
 		size_t allen = strlen(text) + 1;
-		var1tmp->vardata.textvalue = malloc(allen);
+		var1tmp->vardata.textvalue = (char*)malloc(allen);
 		if (var1tmp->vardata.textvalue == NULL) return (SPE_MALLOC << 24) + __LINE__;
 		strcpy(var1tmp->vardata.textvalue, text);
 	}
@@ -548,7 +548,7 @@ static void lav_flat_free(flatp firstone) {
 * free the pointers to the text-items when no longer needed
 */
 static flatp lav_flat_add(flatp firstone, const char* lhs, const char* op, const char* rhs, int block, int* error) {
-	flatp newone = malloc(sizeof(flatelem));
+	flatp newone = (flatp)malloc(sizeof(flatelem));
 	if (newone == NULL) {
 		*error = (SPE_MALLOC << 24) + __LINE__;
 		return firstone;
@@ -557,7 +557,7 @@ static flatp lav_flat_add(flatp firstone, const char* lhs, const char* op, const
 	newone->next = NULL;
 	newone->modifiers = NULL;
 	size_t lengte = strlen(lhs);
-	newone->lhs = malloc(lengte + 1);
+	newone->lhs = (char*)malloc(lengte + 1);
 	if (newone->lhs == NULL) {
 		free(newone);
 		*error = (SPE_MALLOC << 24) + __LINE__;
@@ -565,7 +565,7 @@ static flatp lav_flat_add(flatp firstone, const char* lhs, const char* op, const
 	}
 	strcpy(newone->lhs, lhs);
 	lengte = strlen(op);
-	newone->op = malloc(lengte + 1);
+	newone->op = (char*)malloc(lengte + 1);
 	if (newone->op == NULL) {
 		free(newone->lhs);
 		free(newone);
@@ -574,7 +574,7 @@ static flatp lav_flat_add(flatp firstone, const char* lhs, const char* op, const
 	}
 	strcpy(newone->op, op);
 	lengte = strlen(rhs);
-	newone->rhs = malloc(lengte + 1);
+	newone->rhs = (char*)malloc(lengte + 1);
 	if (newone->rhs == NULL) {
 		free(newone->lhs);
 		free(newone);
@@ -600,7 +600,7 @@ static flatp lav_flat_add(flatp firstone, const char* lhs, const char* op, const
 * free the item when no longer needed (use mod_free)
 */
 static modp lav_mod_create() {
-	modp newone = malloc(sizeof(modelem));
+	modp newone = (modp)malloc(sizeof(modelem));
 	if (newone == NULL) return NULL;
 	newone->efa = NULL;
 	newone->fixed = NULL;
@@ -647,7 +647,7 @@ static void lav_constr_free(constrp firstone) {
 */
 
 static constrp lav_constr_add(constrp firstone, const char* lhs, const char* op, const char* rhs) {
-	constrp newone = malloc(sizeof(constrelem));
+	constrp newone = (constrp)malloc(sizeof(constrelem));
 	if (newone == NULL) {
 		lav_constr_free(firstone);
 		return NULL;
@@ -660,21 +660,21 @@ static constrp lav_constr_add(constrp firstone, const char* lhs, const char* op,
 	newone->user = 1;
 	newone->next = NULL;
 	size_t lengte = strlen(lhs);
-	newone->lhs = malloc(lengte + 1);
+	newone->lhs = (char*)malloc(lengte + 1);
 	if (newone->lhs == NULL) {
 		lav_constr_free(firstone);
 		return NULL;
 	}
 	strcpy(newone->lhs, lhs);
 	lengte = strlen(op);
-	newone->op = malloc(lengte + 1);
+	newone->op = (char*)malloc(lengte + 1);
 	if (newone->op == NULL) {
 		lav_constr_free(firstone);
 		return NULL;
 	}
 	strcpy(newone->op, op);
 	lengte = strlen(rhs);
-	newone->rhs = malloc(lengte + 1);
+	newone->rhs = (char*)malloc(lengte + 1);
 	if (newone->rhs == NULL) {
 		lav_constr_free(firstone);
 		return NULL;
@@ -749,12 +749,22 @@ static TokenLL* lav_Tokenize(const char* modelsrc, int* nbf, int* error) {
 				(modelsrc[pos] == ' ' || modelsrc[pos] == '\t' || modelsrc[pos] == '\r')) pos++;
 			break;
 		default:
-			// numeric literals
-			if ((isdigit(curchar) ||
+			if (curchar < 0 || isalpha(curchar) || curchar == '.' || curchar == '_') { // identifiers
+				do {
+					if ((curchar & 0xF8) == 0xF0) pos += 4;
+					else if ((curchar & 0xF0) == 0xE0) pos += 3;
+					else if ((curchar & 0xE0) == 0xC0) pos += 2;
+					else pos++;
+					if (pos < modellength) curchar = modelsrc[pos];
+				} while (pos < modellength &&
+					(curchar < 0 || isalnum(curchar) || curchar == '_' || curchar == '.'));
+				*error = lav_token_add(&tokens, pos0, pos - pos0, T_IDENTIFIER);
+				priornonspacechar = 'Z'; // not really, but avoid special chars in bytes UFT-8
+			} else if ((isdigit(curchar) || 	// numeric literals
 				(lav_lookupc(curchar, "+-") && (!isdigit(priornonspacechar) && !isalpha(priornonspacechar) && !lav_lookupc(priornonspacechar, "._") && (nextchar == '.' || isdigit(nextchar)))) ||
 				(curchar == '.' && isdigit(nextchar)))) {
 				int decimalfound = (curchar == '.' || (!isdigit(curchar) && nextchar == '.'));
-				pos++;
+				pos++; 
 				if (!isdigit(curchar)) {  // literal starts with . or + or -
 					pos++;
 					if (!isdigit(nextchar)) pos++; // literal starts with "+." or "-."
@@ -780,13 +790,6 @@ static TokenLL* lav_Tokenize(const char* modelsrc, int* nbf, int* error) {
 						*error = (int)(SPE_ILLNUMLIT << 24) + pos0;
 					}
 				}
-			}
-			else if (isalpha(curchar) || curchar == '.' || curchar == '_') { // identifiers
-				pos++;
-				while (pos < modellength &&
-					(isalnum(modelsrc[pos]) || modelsrc[pos] == '_' || modelsrc[pos] == '.')) pos++;
-				*error = lav_token_add(&tokens, pos0, pos - pos0, T_IDENTIFIER);
-				priornonspacechar = modelsrc[pos - 1];
 			}
 			else if (curchar == '~' && nextchar == '*' && modelsrc[pos + 2] == '~') {
 				pos += 3;
@@ -848,7 +851,7 @@ static TokenLL* lav_Tokenize(const char* modelsrc, int* nbf, int* error) {
 			return NULL;
 		}
 	}
-	// concatenate symbols "=" and "~" to operator "=~", "~" and "~" to operator "~~" 
+	// concatenate symbols "=" and "~" to lavoperator "=~", "~" and "~" to lavoperator "~~" 
 	for (curtok = tokens.first; curtok->next != NULL; curtok = curtok->next) {
 		if (strcmp(curtok->tekst, "=") == 0 && strcmp(curtok->next->tekst, "~") == 0) {
 			curtok->len = curtok->next->pos - curtok->pos + curtok->next->len;
@@ -893,7 +896,8 @@ static TokenLL* lav_Tokenize(const char* modelsrc, int* nbf, int* error) {
 	while (curtok != NULL) {
 		curtok->formula = frm_nummer;
 		if (curtok->typ == T_IDENTIFIER && strcmp(curtok->tekst, "efa") == 0) frm_hasefa = 1;
-		if (lav_lookup(curtok->tekst, (const char* []) { "+", "-", "*", "=~", "\a" })) {
+		const char* tmp[] = { "+", "-", "*", "=~", "\a" };
+		if (lav_lookup(curtok->tekst, tmp)) {
 			if (frm_incremented) {
 				frm_nummer--;
 				curtok->formula = frm_nummer;
@@ -912,14 +916,18 @@ static TokenLL* lav_Tokenize(const char* modelsrc, int* nbf, int* error) {
 			}
 		}
 		if (curtok->typ == T_NEWLINE) {
-			if (curtok != tokens.first && curtok->prior->typ != T_NEWLINE) {
-				// ignore multiple nl's
+			if (curtok != tokens.first && curtok->prior->typ != T_NEWLINE) { // ignore multiple nl's
 				if (!frm_hasefa && !frm_lastplus) {
 					frm_nummer++;
 					frm_incremented = 1;
 				}
 				else {
 					frm_hasefa = 0;
+				}
+			}
+			else {
+				if (curtok != tokens.first) {
+					curtok->formula = curtok->prior->formula;
 				}
 			}
 		}
@@ -936,7 +944,7 @@ static TokenLL* lav_Tokenize(const char* modelsrc, int* nbf, int* error) {
 		if (curtok->typ == T_NEWLINE) lav_token_remove(&tokens, curtok);
 	}
 	// split Tokenll tokens in array of TokenLL's
-	TokenLL* formules = calloc(highestformula, sizeof(TokenLL));
+	TokenLL* formules = (TokenLL *)calloc(highestformula, sizeof(TokenLL));
 	if (formules == NULL) {
 		*error = (int)(SPE_MALLOC << 24) + __LINE__;
 		lav_TokenLL_free(&tokens);
@@ -991,7 +999,8 @@ static int lav_InteractionTokens(TokenLL* formul) {
 	int error = 0;
 	for (tokenp curtok = formul->first; curtok != 0; curtok = curtok->next) {
 		if (curtok->typ == T_LAVAANOPERATOR) {
-			if (lav_lookup(curtok->tekst, (const char* []) { ":", "==", "<", ">", ":=", "\a" })) CheckInteraction = 0;
+			const char* tmp[] = { ":", "==", "<", ">", ":=", "\a" };
+			if (lav_lookup(curtok->tekst, tmp)) CheckInteraction = 0;
 			break;
 		}
 	}
@@ -1055,7 +1064,7 @@ static int lav_RemParentheses(TokenLL* formul) {
 *               the length of the returned array is stored in *nbmf
 *                  NULL if error occurred
 * possible errors:
-*      SPE_NOOPERATOR : formula without valid lavaan operator
+*      SPE_NOOPERATOR : formula without valid lavaan lavoperator
 *     SPE_PARENTHESES : formula with left and right parentheses not matching
 */
 static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int* nbmf, int* error) {
@@ -1088,7 +1097,7 @@ static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int* nbmf, int*
 	}
 
 	/*
-	exactly 1 lavaan operator per formula (error if none found)
+	exactly 1 lavaan lavoperator per formula (error if none found)
 	count number of monoformules
 	 */
 
@@ -1113,7 +1122,8 @@ static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int* nbmf, int*
 						curtok->typ = T_SYMBOL;
 					}
 					else {
-						if (lav_lookup(curtok->tekst, (const char* []) { ":", "==", "<", ">", ":=", "\a" })) {
+						const char* tmp1[] = {":", "==", "<", ">", ":=", "\a"};
+						if (lav_lookup(curtok->tekst, tmp1)) {
 							allowsplitting = 0;
 							aantalplusleft = 0;
 						}
@@ -1140,18 +1150,19 @@ static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int* nbmf, int*
 	int jloop = 0;
 	int aantal = 0;
 	while (jloop < nbf - aantal) {
-		tokenp operator = NULL;
+		tokenp lavoperator = NULL;
 		for (tokenp curtok = formules[jloop].first; curtok != NULL; curtok = curtok->next) {
 			if (strcmp(curtok->tekst, "(") == 0) parentheses++;
 			if (strcmp(curtok->tekst, ")") == 0) parentheses--;
 			if (parentheses == 0) {
 				if (curtok->typ == T_LAVAANOPERATOR) {
-					operator = curtok;
+					lavoperator = curtok;
 					break;
 				}
 			}
 		}
-		if (lav_lookup(operator->tekst, (const char* []) { "==", "<", ">", ":=", "\a" })) { // it is a constraint or definition
+		const char* tmp2[] = { "==", "<", ">", ":=", "\a" };
+		if (lav_lookup(lavoperator->tekst, tmp2)) { // it is a constraint or definition
 			TokenLL conform = formules[jloop];
 			for (int jloop2 = jloop + 1; jloop2 < nbf; jloop2++) {
 				formules[jloop2 - 1] = formules[jloop2];
@@ -1165,7 +1176,7 @@ static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int* nbmf, int*
 	}
 	/* split formulas (one by one) in monoformulas */
 	int mfnum = 0; /* variable to keep track of the monoformula to define */
-	MonoFormule* mfs = calloc((size_t)aantalmf, sizeof(MonoFormule));
+	MonoFormule* mfs = (MonoFormule*)calloc((size_t)aantalmf, sizeof(MonoFormule));
 	if (mfs != NULL) {
 		for (int j = 0; j < nbf; j++) {
 			TokenLL formul = formules[j];
@@ -1177,9 +1188,9 @@ static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int* nbmf, int*
 			/* max number of plus-signs to allocate pointer arrays */
 			int maxplus = 0;
 			for (tokenp curtok = formul.first; curtok != 0; curtok = curtok->next) if (curtok->tekst[0] == '+') maxplus++;
-			/* pointer arrays to +-signs and operator */
-			tokenp* leftplus = calloc((size_t)maxplus + 1, sizeof(tokenp));
-			tokenp* rightplus = calloc((size_t)maxplus + 1, sizeof(tokenp));
+			/* pointer arrays to +-signs and lavoperator */
+			tokenp* leftplus = (tokenp*)calloc((size_t)maxplus + 1, sizeof(tokenp));
+			tokenp* rightplus = (tokenp*)calloc((size_t)maxplus + 1, sizeof(tokenp));
 			if (leftplus == NULL || rightplus == NULL) {
 				*error = (int)(SPE_MALLOC << 24) + __LINE__;
 				free(mfs);
@@ -1201,7 +1212,8 @@ static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int* nbmf, int*
 				}
 				if (parentheses == 0) {
 					if (curtok->typ == T_LAVAANOPERATOR) {
-						if (lav_lookup(curtok->tekst, (const char* []) { ":", "==", "<", ">", ":=", "\a" })) {
+						const char* tmp3[] = { ":", "==", "<", ">", ":=", "\a" };
+						if (lav_lookup(curtok->tekst, tmp3)) {
 							allowsplitting = 0;
 							aantalplusleft = 0;
 						}
@@ -1319,19 +1331,17 @@ static char* lav_get_expression(mftokenp starttok, mftokenp endtok, int* error) 
 	return retval;
 }
 /* ------------ lav_parse_operator ----------------------
-* find lavaan operator in list of tokens
+* find lavaan lavoperator in list of tokens
 * parameters:
 * text : char *, tet to interpret as a token
 * return:
-* operators, type of operator, -1 if not found
+* operators, type of lavoperator, -1 if not found
 */
 static operators lav_parse_operator(char* text) {
 	/* OP_MEASURE, OP_FORM, OP_SCALE, OP_CORRELATE, OP_REGRESSED_ON, OP_EQ, OP_LT, OP_GT, OP_DEFINE, OP_BLOCK, OP_THRESHOLD, OP_GROUPWEIGHT
 			 "=~",    "<~",    "~*~",         "~~",             "~",  "==",   "<",   ">",      ":=",      ":",        "\\|",            "%" */
-	return -1 + lav_lookup(text,
-		(const char* []) {
-		"=~", "<~", "~*~", "~~", "~", "==", "<", ">", ":=", ":", "\\|", "%", "\a"
-	});
+	const char* oprs[] = { "=~", "<~", "~*~", "~~", "~", "==", "<", ">", ":=", ":", "\\|", "%", "\a" };
+	return (operators)(lav_lookup(text, oprs) - 1);
 }
 /* ----------------------- lav_parse_get_modifier_l ---------------------
 * function to get left modifier (only efa)
@@ -1346,13 +1356,13 @@ static operators lav_parse_operator(char* text) {
 static char* lav_parse_get_modifier_l(MonoFormule mf, int* error) {
 	/*
 	# only 1 possibility : efa ( expression-resulting-in-char ) *
-	#                                        identifier operator ... (rhs) ...
+	#                                        identifier lavoperator ... (rhs) ...
 	*/
 	if (strcmp(mf.first->tekst, "efa") == 0 &&
 		strcmp(mf.first->next->tekst, "(") == 0 &&
-		strcmp(mf.operator->prior->prior->prior->tekst, ")") == 0 &&
-		strcmp(mf.operator->prior->prior->tekst, "*") == 0) {
-		return lav_get_expression(mf.first->next->next, mf.operator->prior->prior->prior->prior, error);
+		strcmp(mf.lavoperator->prior->prior->prior->tekst, ")") == 0 &&
+		strcmp(mf.lavoperator->prior->prior->tekst, "*") == 0) {
+		return lav_get_expression(mf.first->next->next, mf.lavoperator->prior->prior->prior->prior, error);
 	}
 	*error = SPE_INVALIDLHS + mf.first->pos;
 	return NULL;
@@ -1362,7 +1372,7 @@ static char* lav_parse_get_modifier_l(MonoFormule mf, int* error) {
 * function to get the right modifier(s) in a mono formula
 * parameters
 *      mf : MonoFormule, mono-formula to analyse
-*    from : token to start from or NULL, meaning start from token following operator
+*    from : token to start from or NULL, meaning start from token following lavoperator
 *      mt : modifiertype*, type of modifier detected
 * endtokp : mftokenp*, pointer to last token processed by this call
 *   error : int*, pointer to int receiving error code
@@ -1386,7 +1396,7 @@ static char* lav_parse_get_modifier_l(MonoFormule mf, int* error) {
 		#     resulting in correct type (cannot be checked here)
 */
 static varvec* lav_parse_get_modifier_r(MonoFormule mf, mftokenp from, modifiertype* mt, mftokenp* endtokp, int* error) {
-	varvec* retval = malloc(sizeof(varvec));
+	varvec* retval = (varvec*)malloc(sizeof(varvec));
 	if (retval == 0) {
 		*error = (int)(SPE_MALLOC << 24) + __LINE__;
 		return NULL;
@@ -1394,7 +1404,7 @@ static varvec* lav_parse_get_modifier_r(MonoFormule mf, mftokenp from, modifiert
 	retval->varvecarr = NULL;
 	retval->capacity = 0;
 	retval->length = 0;
-	if (from == NULL) from = mf.operator->next;
+	if (from == NULL) from = mf.lavoperator->next;
 	/* locate end of current modifier: symbol "*" or "?" when previous parentheses match */
 	mftokenp curtok = from;
 	mftokenp endtok = from;
@@ -1418,7 +1428,8 @@ static varvec* lav_parse_get_modifier_r(MonoFormule mf, mftokenp from, modifiert
 		// check for fixed|start|lower|...(c(.*)) ==> remove tokens "c", "(" and ")"
 		mftokenp toklab = from->next;
 		/* typedef enum {M_EFA, M_FIXED, M_START, M_LOWER, M_UPPER, M_LABEL, M_PRIOR, M_RV} modifiertype; */
-		modifiertype welke = lav_lookup(from->tekst, (const char* []) { "fixed", "start", "lower", "upper", "label", "prior", "rv", "c", "\a" });
+		const char* tmp1[] = { "fixed", "start", "lower", "upper", "label", "prior", "rv", "c", "\a" };
+		modifiertype welke = (modifiertype)lav_lookup(from->tekst, tmp1);
 		if (strcmp(from->tekst, "equal") == 0) welke = M_LABEL;
 		if (welke && welke < 8 && from->next->tekst[0] == '(' && strcmp(from->next->next->tekst, "c") == 0 && from->next->next->next->tekst[0] == '(') {
 			mftokenp toktmp = from->next->next->next->next;
@@ -1504,7 +1515,8 @@ static varvec* lav_parse_get_modifier_r(MonoFormule mf, mftokenp from, modifiert
 	}
 	if (strcmp(from->next->tekst, "(") == 0 && strcmp(endtok->prior->tekst, ")") == 0) {
 		/* format something([something]+) */
-		modifiertype welke = lav_lookup(from->tekst, (const char* []) { "fixed", "start", "lower", "upper", "label", "prior", "rv", "c", "\a" });
+		const char* tmp2[] = { "fixed", "start", "lower", "upper", "label", "prior", "rv", "c", "\a" };
+		modifiertype welke = (modifiertype)lav_lookup(from->tekst, tmp2);
 		if (strcmp(from->tekst, "equal") == 0) welke = M_LABEL;
 		switch (welke) {
 		case M_FIXED:
@@ -1581,9 +1593,9 @@ int lav_simple_constraints(parsresultp pr) {
 	constrp priorconstr = NULL;
 	while (curconstr != NULL) {
 		int movetonext = 1;
-		if (lav_lookup(curconstr->op, (const char* []) { "<", ">", "\a" })) { // < or > operator
-			if (lav_validnumlit(curconstr->rhs)) {                            // rhs valid numeric literal
-				bool labelfound = false;                                      // check lhs is label of a relation
+		if (strcmp(curconstr->op, "<") == 0 || strcmp(curconstr->op, ">") == 0) { // < or > lavoperator
+			if (lav_validnumlit(curconstr->rhs)) {                                // rhs valid numeric literal
+				bool labelfound = false;                                          // check lhs is label of a relation
 				flatp curflat = pr->flat;
 				double boundvalue = atof(curconstr -> rhs);
 				while (curflat != NULL) {
@@ -1591,7 +1603,7 @@ int lav_simple_constraints(parsresultp pr) {
 						curflat->modifiers->label->length == 1 &&
 						strcmp(curflat->modifiers->label->varvecarr->vardata.textvalue, curconstr->lhs) == 0) {
 						labelfound = true;
-						varvec* retval = malloc(sizeof(varvec));
+						varvec* retval = (varvec*)malloc(sizeof(varvec));
 						if (retval == 0) {
 							return (int)(SPE_MALLOC << 24) + __LINE__;
 						}
@@ -1644,7 +1656,7 @@ int lav_reorder_cov(parsresultp resultp) {
 	while (curflat != NULL) {
 		int dubbelpunt = lav_lookupc(':', curflat->rhs);
 		if (dubbelpunt) {
-			char* tmp = malloc(dubbelpunt);
+			char* tmp = (char *)malloc(dubbelpunt);
 			if (tmp == NULL) {
 				return (SPE_MALLOC << 24) + __LINE__;
 			}
@@ -1732,7 +1744,7 @@ int lav_reorder_cov(parsresultp resultp) {
 	for (int j = 0; j < tmplen; j++) {
 		int dubbelpunt = lav_lookupc(':', ovxvalue[j]);
 		if (dubbelpunt) {
-			char* tmp = malloc(dubbelpunt);
+			char* tmp = (char *)malloc(dubbelpunt);
 			if (tmp == NULL) {
 				return (SPE_MALLOC << 24) + __LINE__;
 			}
@@ -1841,8 +1853,15 @@ int lav_reorder_cov(parsresultp resultp) {
 *  int, errorcode
 */
 
-static int lav_CreateOutput(parsresult* pr, MonoFormule* mfs, int nbmf)
+static int lav_CreateOutput(parsresult* pr, MonoFormule* mfs, int nbmf, char* extramem)
 {
+	strcpy(&extramem[0], "0");
+	strcpy(&extramem[2], "1");
+	strcpy(&extramem[4], "(");
+	strcpy(&extramem[6], ")");
+	strcpy(&extramem[8], "fixed");
+	strcpy(&extramem[14], "*");
+	const char* tmp1[] = { "group", "level", "block", "class", "\a" };
 	int error = 0;
 	int block = 1;
 	int block_op = 0;
@@ -1854,8 +1873,8 @@ static int lav_CreateOutput(parsresult* pr, MonoFormule* mfs, int nbmf)
 	for (int mfi = 0; mfi < nbmf; mfi++) {
 		MonoFormule formul1 = mfs[mfi];
 		lav_CheckMfTokens(&formul1);
-		mftokenp operator = formul1.operator;
-		operators optype = lav_parse_operator(operator->tekst);
+		mftokenp lavoperator = formul1.lavoperator;
+		operators optype = lav_parse_operator(lavoperator->tekst);
 		char* help;
 		switch (optype) {
 		case OP_EQ:
@@ -1863,20 +1882,21 @@ static int lav_CreateOutput(parsresult* pr, MonoFormule* mfs, int nbmf)
 		case OP_GT:
 		case OP_DEFINE:
 			/* constraints */
-			lhs = lav_get_expression(formul1.first, operator->prior, &error);
-			rhs = lav_get_expression(operator->next, formul1.last, &error);
+			lhs = lav_get_expression(formul1.first, lavoperator->prior, &error);
+			rhs = lav_get_expression(lavoperator->next, formul1.last, &error);
 			if (error) return error;
-			pr->constr = lav_constr_add(pr->constr, lhs, operator->tekst, rhs);
+			pr->constr = lav_constr_add(pr->constr, lhs, lavoperator->tekst, rhs);
 			break;
 		case OP_BLOCK:
 			/* block start */
 			help = lav_tolower(formul1.first->tekst);
-			if (formul1.first == operator || formul1.first->next != operator ||
-				lav_lookup(help, (const char*[]) { "group", "level", "block", "class", "\a" }) == 0 ||
-				formul1.last != operator->next ||
-				(operator->next->typ != T_IDENTIFIER &&
-					operator->next->typ != T_STRINGLITERAL &&
-					operator->next->typ != T_NUMLITERAL)) {
+
+			if (formul1.first == lavoperator || formul1.first->next != lavoperator ||
+				lav_lookup(help, tmp1) == 0 ||
+				formul1.last != lavoperator->next ||
+				(lavoperator->next->typ != T_IDENTIFIER &&
+					lavoperator->next->typ != T_STRINGLITERAL &&
+					lavoperator->next->typ != T_NUMLITERAL)) {
 				return (SPE_INVALIDBLOCK << 24) + formul1.first->pos;
 			}
 			if (!block_op && pr->flat != NULL) {
@@ -1884,15 +1904,15 @@ static int lav_CreateOutput(parsresult* pr, MonoFormule* mfs, int nbmf)
 			}
 			if (block_op) block++;
 			block_op = 1;
-			if (pr->flat == NULL) pr->flat = lav_flat_add(NULL, formul1.first->tekst, operator->tekst, operator->next->tekst, block, &error);
-			else curflat = lav_flat_add(pr->flat, formul1.first->tekst, operator->tekst, operator->next->tekst, block, &error);
+			if (pr->flat == NULL) pr->flat = lav_flat_add(NULL, formul1.first->tekst, lavoperator->tekst, lavoperator->next->tekst, block, &error);
+			else curflat = lav_flat_add(pr->flat, formul1.first->tekst, lavoperator->tekst, lavoperator->next->tekst, block, &error);
 			if (error) return error;
 			break;
 		default:
 			/* ------------------ relational operators -------------------------------- */
-			error = lav_parse_check_valid_name(operator->prior); /* check valid name lhs */
+			error = lav_parse_check_valid_name(lavoperator->prior); /* check valid name lhs */
 			if (error) return(error);
-			for (mftokenp curtok = operator->next; curtok != NULL; curtok = curtok->next) {
+			for (mftokenp curtok = lavoperator->next; curtok != NULL; curtok = curtok->next) {
 				if (curtok->typ == T_IDENTIFIER && strcmp(curtok->tekst, "NA") != 0) {
 					error = lav_parse_check_valid_name(curtok);
 					if (error) return(error);
@@ -1904,33 +1924,31 @@ static int lav_CreateOutput(parsresult* pr, MonoFormule* mfs, int nbmf)
 			}
 			/* intercept fixed on 0
 			   replace 'lhs ~ 0' => 'lhs ~ 0 * 1' - intercept fixed on zero */
-			if (strcmp(operator->next->tekst, "0") == 0 && optype == OP_REGRESSED_ON && operator->next == formul1.last) {
-				error = lav_mftoken_insert(&formul1, NULL, operator->next->pos, "*", T_SYMBOL);
+			if (strcmp(lavoperator->next->tekst, "0") == 0 && optype == OP_REGRESSED_ON && lavoperator->next == formul1.last) {
+				error = lav_mftoken_insert(&formul1, NULL, lavoperator->next->pos, &extramem[14], T_SYMBOL);            // "*"
 				if (error) return error;
-				char* a = malloc(2);
-				strcpy(a, "1");
-				error = lav_mftoken_insert(&formul1, NULL, operator->next->pos, a, T_NUMLITERAL);
+				error = lav_mftoken_insert(&formul1, NULL, lavoperator->next->pos, &extramem[2], T_NUMLITERAL);         // "1"
 				if (error) return error;
 			}
 			/*	phantom latent variable
 				replace 'lhs =~ 0' => 'lhs =~ fixed(0)*lhs', 0 can be other numliteral
 					 also, lhs is last element before '=~' */
-			if (formul1.last == operator->next && formul1.last->typ == T_NUMLITERAL && optype == OP_MEASURE) {
-				error = lav_mftoken_insert(&formul1, formul1.last, operator->next->pos, "fixed", T_IDENTIFIER);
+			if (formul1.last == lavoperator->next && formul1.last->typ == T_NUMLITERAL && optype == OP_MEASURE) {
+				error = lav_mftoken_insert(&formul1, formul1.last, lavoperator->next->pos, &extramem[8], T_IDENTIFIER); // "0"
 				if (error) return error;
-				error = lav_mftoken_insert(&formul1, formul1.last, operator->next->pos, "(", T_SYMBOL);
+				error = lav_mftoken_insert(&formul1, formul1.last, lavoperator->next->pos, &extramem[4], T_SYMBOL);     // "("
 				if (error) return error;
-				error = lav_mftoken_insert(&formul1, NULL, operator->next->pos, ")", T_SYMBOL);
+				error = lav_mftoken_insert(&formul1, NULL, lavoperator->next->pos, &extramem[6], T_SYMBOL);             // ")"
 				if (error) return error;
-				error = lav_mftoken_insert(&formul1, NULL, operator->next->pos, "*", T_SYMBOL);
+				error = lav_mftoken_insert(&formul1, NULL, lavoperator->next->pos, &extramem[14], T_SYMBOL);            // "*"
 				if (error) return error;
-				error = lav_mftoken_insert(&formul1, NULL, operator->next->pos, operator->prior->tekst, operator->prior->typ);
+				error = lav_mftoken_insert(&formul1, NULL, lavoperator->next->pos, lavoperator->prior->tekst, lavoperator->prior->typ);
 				if (error) return error;
 			}
 			/* modifiers */
 			/* 1. Add flat if necessary or find existing flat */
-			lhs = operator->prior->tekst;
-			op = operator->tekst;
+			lhs = lavoperator->prior->tekst;
+			op = lavoperator->tekst;
 			rhs = formul1.last->tekst;
 			if (formul1.last->typ == T_NUMLITERAL && optype == OP_REGRESSED_ON) strcpy(rhs, "");
 			if (pr->flat == NULL) {
@@ -1966,7 +1984,7 @@ static int lav_CreateOutput(parsresult* pr, MonoFormule* mfs, int nbmf)
 				}
 			}
 			else curmod = curflat->modifiers;
-			if (formul1.first->next != operator) {
+			if (formul1.first->next != lavoperator) {
 				modifchar = lav_parse_get_modifier_l(formul1, &error);
 				if (error != 0) {
 					if (curflat->modifiers == NULL) free(curmod);
@@ -1983,13 +2001,13 @@ static int lav_CreateOutput(parsresult* pr, MonoFormule* mfs, int nbmf)
 				modadded = 1;
 			}
 			/* 3. rhs modifiers */
-			varvec* modif = malloc(sizeof(varvec));
+			varvec* modif = (varvec *)malloc(sizeof(varvec));
 			mftokenp from = NULL;
-			enum modifiertype modtyp = -1;
+			enum modifiertype modtyp = (modifiertype) (-1);
 			mftokenp endtok = NULL;
 			do {
 				modif = lav_parse_get_modifier_r(formul1, from, &modtyp, &endtok, &error);
-				int warnpos = (from == NULL) ? formul1.operator->next->pos : from->pos;
+				int warnpos = (from == NULL) ? formul1.lavoperator->next->pos : from->pos;
 				if (modif->length != 0) {
 					switch (modtyp) {
 					case M_FIXED:
@@ -2050,7 +2068,7 @@ static int lav_CreateOutput(parsresult* pr, MonoFormule* mfs, int nbmf)
 	for (curflat = pr->flat; curflat != NULL; curflat = curflat->next) {
 		if (curflat->op != NULL && strcmp(curflat->op, "~") == 0 && strcmp(curflat->rhs, "") == 0) {
 			free(curflat->op);
-			curflat->op = malloc(3);
+			curflat->op = (char*)malloc(3);
 			if (curflat->op != NULL) strcpy(curflat->op, "~1");
 			else {
 				return (SPE_MALLOC << 24) + __LINE__;
@@ -2104,6 +2122,7 @@ int lav_parse(parsresult* pr, const char* model, int* errorpos, const char** res
 	int errornumber = 0;
 	int j = 0;
 	bool oke;
+	char* extramem = NULL; // extra memory for step 3 strings "0", "1", "(", ")", "fixed" and "*" 
 	while (strcmp(reservedwords[j], "\a") != 0) j++;
 	ReservedWords = lav_sl_from_array(reservedwords, j, true, &oke);
 	TokenLL* formules = lav_Tokenize(model, &nbf, &error);
@@ -2114,12 +2133,12 @@ int lav_parse(parsresult* pr, const char* model, int* errorpos, const char** res
 			for (j = 0; j < nbf; j++) {
 				fprintf(report, "\tFormule %d:\n", j);
 				tokenp curtok = formules[j].first;
-				char* wat;
+				const char* wat;
 				do {
 					switch (curtok->typ)
 					{
 					case T_IDENTIFIER: wat = "identifier"; break;
-					case T_LAVAANOPERATOR: wat = "operator"; break;
+					case T_LAVAANOPERATOR: wat = "lavoperator"; break;
 					case T_NEWLINE: wat = "newline"; break;
 					case T_NUMLITERAL:wat = "numliteral"; break;
 					case T_STRINGLITERAL: wat = "stringliteral"; break;
@@ -2140,7 +2159,7 @@ int lav_parse(parsresult* pr, const char* model, int* errorpos, const char** res
 			if (report != NULL) {
 				fprintf(report, "\nMonoFormulas:\n");
 				for (j = 0; j < nbmf; j++) {
-					fprintf(report, "\t%p\t%p\t%p\t", mf[j].first, mf[j].operator, mf[j].last);
+					fprintf(report, "\t%p\t%p\t%p\t", mf[j].first, mf[j].lavoperator, mf[j].last);
 					mftokenp curtok = mf[j].first;
 					do {
 						fprintf(report, "%s", curtok->tekst);
@@ -2150,10 +2169,17 @@ int lav_parse(parsresult* pr, const char* model, int* errorpos, const char** res
 				}
 			}
 #endif
-			error = lav_CreateOutput(pr, mf, nbmf);
-			pr->wrn = statwarnp;
-			for (j = 0; j < nbmf; j++) lav_MonoFormule_free(&mf[j]);
-			free(mf);
+			extramem = (char*)malloc(32);
+			if (extramem == NULL) {
+				error = (int)(SPE_MALLOC << 24) + __LINE__;
+			}
+			else {
+				error = lav_CreateOutput(pr, mf, nbmf, extramem);
+				pr->wrn = statwarnp;
+				for (j = 0; j < nbmf; j++) lav_MonoFormule_free(&mf[j]);
+				free(mf);
+				free(extramem);
+			}
 		}
 		for (j = 0; j < nbf; j++) lav_TokenLL_free(&formules[j]);
 		free(formules);

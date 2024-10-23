@@ -44,7 +44,7 @@ char* lav_varstostring(const varvec* vv, int* error, int* numericpossible) {
     SEXP value;
     switch (vv->varvecarr[j].vartype) {
     case 1:
-      sprintf_s(a, 15, "%g", vv->varvecarr[j].vardata.numvalue);
+      sprintf(a, "%g", vv->varvecarr[j].vardata.numvalue);
       if (!lav_sb_add(&sb, a)) {
         *error = (SPE_MALLOC << 16) + __LINE__;
         return NULL;
@@ -64,7 +64,7 @@ char* lav_varstostring(const varvec* vv, int* error, int* numericpossible) {
         return NULL;
       }
       if (isNumeric(value)) {
-        sprintf_s(a, 15, "%g", REAL(value)[0]);
+        sprintf(a, "%g", REAL(value)[0]);
         if (!lav_sb_add(&sb, a)) {
           *error = (SPE_MALLOC << 16) + __LINE__;
           UNPROTECT(1);
@@ -110,7 +110,7 @@ SEXP lav_varstoSEXPstring(const varvec* vv, int* error) {
     SEXP value;
     switch (vv->varvecarr[j].vartype) {
     case 1:
-      sprintf_s(a, 15, "%g", vv->varvecarr[j].vardata.numvalue);
+      sprintf(a, "%g", vv->varvecarr[j].vardata.numvalue);
       SET_STRING_ELT(retval, j, mkChar(a));
       break;
     case 2:
@@ -123,7 +123,7 @@ SEXP lav_varstoSEXPstring(const varvec* vv, int* error) {
         return NULL;
       }
       if (isNumeric(value)) {
-        sprintf_s(a, 15, "%g", REAL(value)[0]);
+        sprintf(a, "%g", REAL(value)[0]);
         SET_STRING_ELT(retval, j, mkChar(a));
       } else {
         SET_STRING_ELT(retval, j, value);
@@ -183,6 +183,7 @@ SEXP lav_errorhere(int errorcode, int errorposition, SEXP model) {
 }
 
 /* main function */
+extern "C" {
 SEXP lav_parse_interface(SEXP model) {
   /* reserved words *in R*, to be modified if used for another programming language */
   static const char* ReservedWords[] =
@@ -494,4 +495,5 @@ SEXP lav_parse_interface(SEXP model) {
   lav_freeparsresult(&resultaat); // free returnvalue from lav_parse
   UNPROTECT(nprotect);
   return answer;
+}
 }

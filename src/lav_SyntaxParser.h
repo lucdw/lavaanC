@@ -67,7 +67,7 @@ typedef parsresult* parsresultp;
 #define SPE_EMPTYMODEL (int)22      /* model is empty */
 #define SPE_FORMUL1 (int)23         /* model contains formule with only 1 token */
 #define SPE_ILLCHAR (int)24         /* model contains illegal character (not used in C program) */
-#define SPE_NOOPERATOR (int)31      /* formula without valid lavaan operator */
+#define SPE_NOOPERATOR (int)31      /* formula without valid lavaan lavoperator */
 #define SPE_PARENTHESES (int)32     /* formula with left and right parentheses not matching */
 #define SPE_3WAYINTERACTION (int)33 /* Three - way or higher - order interaction terms */
 #define SPE_INVALIDNAME (int)41     /* invalid identifier name */
@@ -84,7 +84,7 @@ typedef parsresult* parsresultp;
 
 /* Syntax Parser Warnings */
 
-#define SPW_OPERATORBLANKS (int)101     /* blanks in lavaan operator is deprecated */
+#define SPW_OPERATORBLANKS (int)101     /* blanks in lavaan lavoperator is deprecated */
 #define SPW_IDENTIFIERBLANKS (int)102   /* blanks in identifier is deprecated */
 #define SPW_FIRSTBLK (int)103           /* first block defined after other formula */
 #define SPW_MODMULTIPLE (int)104        /* modifier specified multiple times, overwritten */

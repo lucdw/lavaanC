@@ -44,7 +44,7 @@ int lav_lookupc(char c, const char* str) {
 */
 char* lav_tolower(const char* a) {
 	size_t ll = strlen(a);
-	char* b = malloc(ll + 1);
+	char* b = (char *)malloc(ll + 1);
 	if (b == NULL) return NULL;
 	int diff = 'a' - 'A';
 	for (int j = 0; j < ll; j++) {
@@ -112,7 +112,7 @@ StringBuilder lav_sb_init(bool* oke) {
 	*oke = true;
 	StringBuilder retval = { NULL, 0, 0 };
 	retval.capacity = SB_INITIAL_SIZE;
-	retval.value = malloc(retval.capacity + 1);
+	retval.value = (char *)malloc(retval.capacity + 1);
 	if (retval.value == NULL) *oke = false;
 	else retval.value[0] = (char)0;
 	retval.vallength = 0;
@@ -133,7 +133,7 @@ bool lav_sb_add(StringBuilderP sbp, const char* a) {
 		size_t newcap = SB_INITIAL_SIZE << 1;
 		while (newcap < alen + sbp->vallength + 1) newcap = newcap << 1;
 		sbp->capacity = newcap;
-		char* newval = malloc(newcap + 1);
+		char* newval = (char*)malloc(newcap + 1);
 		if (newval == NULL) return false;
 		strcpy(newval, sbp->value);
 		free(sbp->value);
@@ -154,8 +154,8 @@ bool lav_sb_add(StringBuilderP sbp, const char* a) {
 */
 char* lav_sb_value(StringBuilderP sbp, bool* oke) {
 	*oke = true;
-	if (sbp->vallength == 0) return "";
-	char* retval = malloc(sbp->vallength + 1);
+	if (sbp->vallength == 0) return (char *)"";
+	char* retval = (char *)malloc(sbp->vallength + 1);
 	if (retval == NULL) {
 		*oke = false;
 		return NULL;
@@ -191,7 +191,7 @@ StringList lav_sl_init(bool unique, bool* oke) {
 	*oke = true;
 	StringList retval = { NULL, 0, 0, false };
 	retval.capacity = SL_INITIAL_SIZE;
-	retval.value = calloc(retval.capacity, sizeof(char*));
+	retval.value = (char **)calloc(retval.capacity, sizeof(char*));
 	if (retval.value == NULL) *oke = false;
 	retval.vallength = 0;
 	retval.unique = unique;
@@ -230,14 +230,14 @@ char** lav_sl_to_array(StringListP slp, unsigned short* length, bool* oke) {
 	*oke = true;
 	*length = slp->vallength;
 	if (slp->vallength == 0) return NULL;
-	char** retval = calloc(slp->vallength, sizeof(char*));
+	char** retval = (char **)calloc(slp->vallength, sizeof(char*));
 	if (retval == NULL) {
 		*oke = false;
 		return NULL;
 	}
 	for (int i = 0; i < slp->vallength; i++) {
 		size_t alen = strlen(slp->value[i]);
-		retval[i] = malloc(alen + 1);
+		retval[i] = (char *)malloc(alen + 1);
 		if (retval[i] == NULL) {
 			*oke = false;
 			return NULL;
@@ -272,7 +272,7 @@ bool lav_sl_add(StringListP slp, const char* a) {
 			unsigned short newcap = SL_INITIAL_SIZE << 1;
 			while (newcap < slp->vallength + 1) newcap = newcap << 1;
 			slp->capacity = newcap;
-			char** newval = calloc(newcap, sizeof(char*));
+			char** newval = (char **)calloc(newcap, sizeof(char*));
 			if (newval == NULL) return false;
 			int j = 0;
 			for (int i = 0; i < slp->vallength; i++) {
@@ -283,7 +283,7 @@ bool lav_sl_add(StringListP slp, const char* a) {
 			slp->vallength = j;
 		}
 		size_t alen = strlen(a);
-		slp->value[slp->vallength] = malloc(alen + 1);
+		slp->value[slp->vallength] = (char *)malloc(alen + 1);
 		if (slp->value[slp->vallength] == NULL) return false;
 		strcpy(slp->value[slp->vallength], a);
 		slp->vallength++;
