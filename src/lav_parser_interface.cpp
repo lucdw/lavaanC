@@ -11,7 +11,7 @@ SEXP lav_eval(char* expression, int* error)
   *error = 0;
   SEXP cmdSexp, cmdexpr, ans = R_NilValue;
   ParseStatus status;
-  cmdSexp = PROTECT(allocVector(STRSXP, 1));
+  cmdSexp = PROTECT(Rf_allocVector(STRSXP, 1));
   SET_STRING_ELT(cmdSexp, 0, mkChar(expression));
   cmdexpr = PROTECT(R_ParseVector(cmdSexp, -1, &status, R_NilValue));
   if (status != PARSE_OK) {
@@ -20,9 +20,9 @@ SEXP lav_eval(char* expression, int* error)
     return ans;
   }
   /* Loop is needed here as EXPSEXP will be of length > 1 */
-  ans = PROTECT(allocVector(VECSXP, length(cmdexpr)));
+  ans = PROTECT(Rf_allocVector(VECSXP, length(cmdexpr)));
   for(int i = 0; i < length(cmdexpr); i++)
-    SET_VECTOR_ELT(ans, i, eval(VECTOR_ELT(cmdexpr, i), R_GlobalEnv));
+    SET_VECTOR_ELT(ans, i, Rf_eval(VECTOR_ELT(cmdexpr, i), R_GlobalEnv));
   UNPROTECT(3);
   return ans;
 }
@@ -104,7 +104,7 @@ char* lav_varstostring(const varvec* vv, int* error, int* numericpossible) {
 
 /* lav_varstoSEXPstring translates a varvector to string vector */
 SEXP lav_varstoSEXPstring(const varvec* vv, int* error) {
-  SEXP retval = PROTECT(allocVector(STRSXP, vv->length));
+  SEXP retval = PROTECT(Rf_allocVector(STRSXP, vv->length));
   char a[20];
   for (int j = 0; j < vv->length; j++) {
     SEXP value;
@@ -140,7 +140,7 @@ SEXP lav_varstoSEXPstring(const varvec* vv, int* error) {
 }
 /* lav_varstoSEXPdouble translates a varvector to double vector */
 SEXP lav_varstoSEXPdouble(const varvec* vv, int* error) {
-  SEXP retval = PROTECT(allocVector(REALSXP, vv->length));
+  SEXP retval = PROTECT(Rf_allocVector(REALSXP, vv->length));
   double *rans = REAL(retval);
   for (int j = 0; j < vv->length; j++) {
     SEXP value;
@@ -168,7 +168,7 @@ SEXP lav_varstoSEXPdouble(const varvec* vv, int* error) {
 /* error occurred here */
 SEXP lav_errorhere(int errorcode, int errorposition, SEXP model) {
   SEXP foutvec;
-  foutvec = PROTECT(allocVector(INTSXP, 4));
+  foutvec = PROTECT(Rf_allocVector(INTSXP, 4));
   INTEGER(foutvec)[0] = errorcode;
   INTEGER(foutvec)[1] = errorposition;
   const char* md = CHAR(STRING_ELT(model, 0));
@@ -206,7 +206,7 @@ SEXP lav_parse_interface(SEXP model) {
   fout = lav_parse(&resultaat, CHAR(STRING_ELT(model, 0)), &foutpos, ReservedWords, NULL);
   if (fout) {
     SEXP foutvec;
-    foutvec = PROTECT(allocVector(INTSXP, 2));
+    foutvec = PROTECT(Rf_allocVector(INTSXP, 2));
     nprotect++;
     INTEGER(foutvec)[0] = fout;
     INTEGER(foutvec)[1] = foutpos;
@@ -232,56 +232,56 @@ SEXP lav_parse_interface(SEXP model) {
     wp = wp->next;
   };
   /* allocation modifiers attribute */
-  modifiers = PROTECT(allocVector(VECSXP, modlen));
+  modifiers = PROTECT(Rf_allocVector(VECSXP, modlen));
   nprotect++;
   /* allocation constraints attribute */
-  constraints = PROTECT(allocVector(VECSXP, conlen));
+  constraints = PROTECT(Rf_allocVector(VECSXP, conlen));
   nprotect++;
   /* allocation warns attribute */
-  warns = PROTECT(allocVector(VECSXP, wrnlen));
+  warns = PROTECT(Rf_allocVector(VECSXP, wrnlen));
   nprotect++;
   /* allocation flat elements */
   SEXP answer;
-  answer = PROTECT(allocVector(VECSXP, 13));
+  answer = PROTECT(Rf_allocVector(VECSXP, 13));
   nprotect++;
   SEXP lhs;
-  lhs = PROTECT(allocVector(STRSXP, flatlen));
+  lhs = PROTECT(Rf_allocVector(STRSXP, flatlen));
   nprotect++;
   SEXP op;
-  op = PROTECT(allocVector(STRSXP, flatlen));
+  op = PROTECT(Rf_allocVector(STRSXP, flatlen));
   nprotect++;
   SEXP rhs;
-  rhs = PROTECT(allocVector(STRSXP, flatlen));
+  rhs = PROTECT(Rf_allocVector(STRSXP, flatlen));
   nprotect++;
   SEXP modidx;
-  modidx = PROTECT(allocVector(INTSXP, flatlen));
+  modidx = PROTECT(Rf_allocVector(INTSXP, flatlen));
   nprotect++;
   SEXP block;
-  block = PROTECT(allocVector(INTSXP, flatlen));
+  block = PROTECT(Rf_allocVector(INTSXP, flatlen));
   nprotect++;
   SEXP fixed;
-  fixed = PROTECT(allocVector(STRSXP, flatlen));
+  fixed = PROTECT(Rf_allocVector(STRSXP, flatlen));
   nprotect++;
   SEXP start;
-  start = PROTECT(allocVector(STRSXP, flatlen));
+  start = PROTECT(Rf_allocVector(STRSXP, flatlen));
   nprotect++;
   SEXP lower;
-  lower = PROTECT(allocVector(STRSXP, flatlen));
+  lower = PROTECT(Rf_allocVector(STRSXP, flatlen));
   nprotect++;
   SEXP upper;
-  upper = PROTECT(allocVector(STRSXP, flatlen));
+  upper = PROTECT(Rf_allocVector(STRSXP, flatlen));
   nprotect++;
   SEXP label;
-  label = PROTECT(allocVector(STRSXP, flatlen));
+  label = PROTECT(Rf_allocVector(STRSXP, flatlen));
   nprotect++;
   SEXP prior;
-  prior = PROTECT(allocVector(STRSXP, flatlen));
+  prior = PROTECT(Rf_allocVector(STRSXP, flatlen));
   nprotect++;
   SEXP efa;
-  efa = PROTECT(allocVector(STRSXP, flatlen));
+  efa = PROTECT(Rf_allocVector(STRSXP, flatlen));
   nprotect++;
   SEXP rv;
-  rv = PROTECT(allocVector(STRSXP, flatlen));
+  rv = PROTECT(Rf_allocVector(STRSXP, flatlen));
   nprotect++;
   /* fill flatelements and modifiers */
   int flati = 0;
@@ -302,9 +302,9 @@ SEXP lav_parse_interface(SEXP model) {
       if (fl->modifiers->rv != NULL) modif1count++;
       // allocate list for modifiers
       SEXP modif1, modif1lab;
-      modif1 = PROTECT(allocVector(VECSXP, modif1count));
+      modif1 = PROTECT(Rf_allocVector(VECSXP, modif1count));
       nprotect++;
-      modif1lab= PROTECT(allocVector(VECSXP, modif1count)); // for names attribute
+      modif1lab= PROTECT(Rf_allocVector(VECSXP, modif1count)); // for names attribute
       nprotect++;
       // fill modifier and flat elements
       int modif1i = 0;
@@ -426,9 +426,9 @@ SEXP lav_parse_interface(SEXP model) {
   cop = resultaat.constr;
   SEXP constr1, constr1lab;
   while (cop != NULL) {
-    constr1 =  PROTECT(allocVector(VECSXP, 4));
+    constr1 =  PROTECT(Rf_allocVector(VECSXP, 4));
     nprotect++;
-    constr1lab = PROTECT(allocVector(VECSXP, 4));
+    constr1lab = PROTECT(Rf_allocVector(VECSXP, 4));
     nprotect++;
     SET_VECTOR_ELT(constr1, 0, mkString(cop->op));
     SET_VECTOR_ELT(constr1, 1, mkString(cop->lhs));
@@ -448,7 +448,7 @@ SEXP lav_parse_interface(SEXP model) {
   wp = resultaat.wrn;
   SEXP warn1;
   while (wp != NULL) {
-    warn1 =  PROTECT(allocVector(INTSXP, 2));
+    warn1 =  PROTECT(Rf_allocVector(INTSXP, 2));
     nprotect++;
     int *w1 = INTEGER(warn1);
     w1[0] = wp->warncode;
@@ -472,7 +472,7 @@ SEXP lav_parse_interface(SEXP model) {
   SET_VECTOR_ELT(answer, 10, prior);
   SET_VECTOR_ELT(answer, 11, efa);
   SET_VECTOR_ELT(answer, 12, rv);
-  SEXP thenames = PROTECT(allocVector(VECSXP, 13));
+  SEXP thenames = PROTECT(Rf_allocVector(VECSXP, 13));
   nprotect++;
   SET_VECTOR_ELT(thenames, 0, mkString("lhs"));
   SET_VECTOR_ELT(thenames, 1, mkString("op"));
