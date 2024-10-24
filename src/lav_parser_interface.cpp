@@ -44,10 +44,11 @@ char* lav_varstostring(const varvec* vv, int* error, int* numericpossible) {
     SEXP value;
     switch (vv->varvecarr[j].vartype) {
     case 1:
-      sprintf(a, "%g", vv->varvecarr[j].vardata.numvalue);
+      strcpy(a, CHAR(Rf_asChar(Rf_ScalarReal(vv->varvecarr[j].vardata.numvalue))));
+//      sprintf(a, "%g", vv->varvecarr[j].vardata.numvalue);
       if (!lav_sb_add(&sb, a)) {
         *error = (SPE_MALLOC << 16) + __LINE__;
-        return NULL;
+         return NULL;
       }
       break;
     case 2:
@@ -64,14 +65,15 @@ char* lav_varstostring(const varvec* vv, int* error, int* numericpossible) {
         return NULL;
       }
       if (Rf_isNumeric(value)) {
-        sprintf(a, "%g", REAL(value)[0]);
+        strcpy(a, CHAR(Rf_asChar(value)));
+//        sprintf(a, "%g", REAL(value)[0]);
         if (!lav_sb_add(&sb, a)) {
           *error = (SPE_MALLOC << 16) + __LINE__;
           UNPROTECT(1);
           return NULL;
         }
       } else {
-        if (!lav_sb_add(&sb, CHAR(STRING_ELT(value, 0)))){
+      if (!lav_sb_add(&sb, CHAR(STRING_ELT(value, 0)))){
           *error = (SPE_MALLOC << 16) + __LINE__;
           UNPROTECT(1);
           return NULL;
@@ -110,7 +112,8 @@ SEXP lav_varstoSEXPstring(const varvec* vv, int* error) {
     SEXP value;
     switch (vv->varvecarr[j].vartype) {
     case 1:
-      sprintf(a, "%g", vv->varvecarr[j].vardata.numvalue);
+      strcpy(a, CHAR(Rf_asChar(Rf_ScalarReal(vv->varvecarr[j].vardata.numvalue))));
+//      sprintf(a, "%g", vv->varvecarr[j].vardata.numvalue);
       SET_STRING_ELT(retval, j, Rf_mkChar(a));
       break;
     case 2:
@@ -123,7 +126,8 @@ SEXP lav_varstoSEXPstring(const varvec* vv, int* error) {
         return NULL;
       }
       if (Rf_isNumeric(value)) {
-        sprintf(a, "%g", REAL(value)[0]);
+        strcpy(a, CHAR(Rf_asChar(value)));
+//        sprintf(a, "%g", REAL(value)[0]);
         SET_STRING_ELT(retval, j, Rf_mkChar(a));
       } else {
         SET_STRING_ELT(retval, j, value);
