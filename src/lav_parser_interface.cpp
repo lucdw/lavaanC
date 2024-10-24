@@ -1,4 +1,4 @@
-// #include <R.h>
+#include <R.h>
 #include <Rinternals.h>
 #include <R_ext/Parse.h>
 #include <string.h>

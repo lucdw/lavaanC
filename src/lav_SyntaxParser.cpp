@@ -1296,6 +1296,16 @@ static int lav_parse_check_valid_name(mftokenp tok) {
 * free the returned pointer when no longer needed
 */
 static char* lav_get_expression(mftokenp starttok, mftokenp endtok, int* error) {
+	char* retval = NULL;
+	if (starttok == endtok) {
+		retval = (char *)malloc(strlen(starttok->tekst) + 1);
+		if (retval ==  NULL) {
+			*error = (int)(SPE_MALLOC << 24) + __LINE__;
+			return NULL;
+		}
+		strcpy(retval, starttok->tekst);
+		return retval;
+	} 
 	bool oke = true;
 	StringBuilder sb = lav_sb_init(&oke);
 	if (!oke) {
@@ -1323,7 +1333,7 @@ static char* lav_get_expression(mftokenp starttok, mftokenp endtok, int* error) 
 		if (curtok == endtok) break;
 		curtok = curtok->next;
 	}
-	char* retval = lav_sb_value(&sb, &oke);
+	retval = lav_sb_value(&sb, &oke);
 	if (!oke) {
 		*error = (SPE_MALLOC << 24) + __LINE__;
 		return NULL;
@@ -1442,7 +1452,10 @@ static varvec* lav_parse_get_modifier_r(MonoFormule mf, mftokenp from, modifiert
 		toklab = from->next;
 		if (from->next->tekst[0] == '(') {
 			if (welke == 8) {
-				if (endtok->tekst[0] == '*') welke = M_LABEL;
+				if (endtok->tekst[0] == '*') {
+					if (from->next->next->typ == T_NUMLITERAL) welke = M_FIXED;
+					else welke = M_LABEL;
+				}
 				else welke = M_START;
 			}
 			if (welke) {
@@ -1504,10 +1517,12 @@ static varvec* lav_parse_get_modifier_r(MonoFormule mf, mftokenp from, modifiert
 			returnok = 1;
 			*error = lav_var_addNA(retval, from->pos);
 		}
-		if (from->typ == T_STRINGLITERAL || from->typ == T_IDENTIFIER) {
-			*mt = M_LABEL;
-			returnok = 1;
-			*error = lav_var_addtext(retval, from->tekst, from->pos);
+		else {
+			if (from->typ == T_STRINGLITERAL || from->typ == T_IDENTIFIER) {
+				*mt = M_LABEL;
+				returnok = 1;
+				*error = lav_var_addtext(retval, from->tekst, from->pos);
+			}
 		}
 		if (!returnok) *error = (int)(SPE_MODNOLITORID << 24) + from->pos;
 		if (*error) return retval;
