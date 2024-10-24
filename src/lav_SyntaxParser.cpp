@@ -44,7 +44,7 @@ typedef struct MonoFormule {
 #define NEW_MF {(void *)0, (void *)0, (void *)0}
 
 typedef enum modifiertype {
-	M_EFA, M_FIXED, M_START, M_LOWER, M_UPPER, M_LABEL, M_PRIOR, M_RV
+	M_EFA, M_FIXED, M_START, M_LOWER, M_UPPER, M_LABEL, M_PRIOR, M_RV, M_UNKNOWN
 } modifiertype;
 typedef enum operators {
 	OP_MEASURE, OP_FORM, OP_SCALE, OP_CORRELATE, OP_REGRESSED_ON, OP_EQ, OP_LT, OP_GT, OP_DEFINE, OP_BLOCK, OP_THRESHOLD, OP_GROUPWEIGHT
@@ -60,7 +60,7 @@ static warnp statwarnp = NULL;
 static StringList ReservedWords;
 
 /* ----------------- warn_init ----------------------------------
-* prepare statwarnp (pointer to array with warnings) for acceptance 
+* prepare statwarnp (pointer to array with warnings) for acceptance
 * of warnings, removing old ones if necessary
 */
 static void lav_warn_init(void) {
@@ -447,7 +447,7 @@ static int lav_var_addNA(varvec* vv, int pos) {
 static char* lav_var_tostring(const varvec* vv, int* error) {
 	char a[15];
 	bool oke = true;
-	StringBuilder sb = lav_sb_init(&oke); 
+	StringBuilder sb = lav_sb_init(&oke);
 	if (!oke) {
 		*error = (SPE_MALLOC << 24) + __LINE__;
 		return NULL;
@@ -702,7 +702,7 @@ static constrp lav_constr_add(constrp firstone, const char* lhs, const char* op,
 * possible errors:
 * SPE_ILLNUMLIT : illegal numeric literal(e.g. 23.0ea34)
 * SPE_FORMUL1 : formule with only 1 token in it
-* SPE_EMPTYMODEL : model contains no meaningfull tokens 
+* SPE_EMPTYMODEL : model contains no meaningfull tokens
 * SPE_FORMUL1 : model contains formula with only 1 token in it, implying an erroneous formula
 */
 static TokenLL* lav_Tokenize(const char* modelsrc, int* nbf, int* error) {
@@ -764,7 +764,7 @@ static TokenLL* lav_Tokenize(const char* modelsrc, int* nbf, int* error) {
 				(lav_lookupc(curchar, "+-") && (!isdigit(priornonspacechar) && !isalpha(priornonspacechar) && !lav_lookupc(priornonspacechar, "._") && (nextchar == '.' || isdigit(nextchar)))) ||
 				(curchar == '.' && isdigit(nextchar)))) {
 				int decimalfound = (curchar == '.' || (!isdigit(curchar) && nextchar == '.'));
-				pos++; 
+				pos++;
 				if (!isdigit(curchar)) {  // literal starts with . or + or -
 					pos++;
 					if (!isdigit(nextchar)) pos++; // literal starts with "+." or "-."
@@ -851,7 +851,7 @@ static TokenLL* lav_Tokenize(const char* modelsrc, int* nbf, int* error) {
 			return NULL;
 		}
 	}
-	// concatenate symbols "=" and "~" to lavoperator "=~", "~" and "~" to lavoperator "~~" 
+	// concatenate symbols "=" and "~" to lavoperator "=~", "~" and "~" to lavoperator "~~"
 	for (curtok = tokens.first; curtok->next != NULL; curtok = curtok->next) {
 		if (strcmp(curtok->tekst, "=") == 0 && strcmp(curtok->next->tekst, "~") == 0) {
 			curtok->len = curtok->next->pos - curtok->pos + curtok->next->len;
@@ -1305,7 +1305,7 @@ static char* lav_get_expression(mftokenp starttok, mftokenp endtok, int* error) 
 		}
 		strcpy(retval, starttok->tekst);
 		return retval;
-	} 
+	}
 	bool oke = true;
 	StringBuilder sb = lav_sb_init(&oke);
 	if (!oke) {
@@ -1594,7 +1594,7 @@ static varvec* lav_parse_get_modifier_r(MonoFormule mf, mftokenp from, modifiert
 	if (*error) lav_var_free(retval);
 	return retval;
 }
-/* ------------------- lav_simple_constraints ------------ 
+/* ------------------- lav_simple_constraints ------------
 * simple constraint of the form x </> numliteral are moved to
 * the flat records modifiers upper/lower.
 * parameters
@@ -1614,7 +1614,7 @@ int lav_simple_constraints(parsresultp pr) {
 				flatp curflat = pr->flat;
 				double boundvalue = atof(curconstr -> rhs);
 				while (curflat != NULL) {
-					if (curflat->modifiers != NULL && curflat->modifiers->label != NULL && 
+					if (curflat->modifiers != NULL && curflat->modifiers->label != NULL &&
 						curflat->modifiers->label->length == 1 &&
 						strcmp(curflat->modifiers->label->varvecarr->vardata.textvalue, curconstr->lhs) == 0) {
 						labelfound = true;
@@ -1816,7 +1816,7 @@ int lav_reorder_cov(parsresultp resultp) {
 	// extra = ov.cov + ovint
 	StringList slextra = lav_sl_addlists(&slovcov, &slovint, &oke);
 	CHECK_OK(__LINE__);
-	// sl (ovnames) = ov.tmp + (ov.extra - ov.tmp) = ov.tmp + ov.extra because unique is set 
+	// sl (ovnames) = ov.tmp + (ov.extra - ov.tmp) = ov.tmp + ov.extra because unique is set
 	StringList slov = lav_sl_addlists(&sltmp, &slextra, &oke);
 	lav_sl_free(&sltmp);
 	CHECK_OK(__LINE__);
@@ -1862,7 +1862,7 @@ int lav_reorder_cov(parsresultp resultp) {
 /* ******************* step 3 : Create output ***************
 * parameters
 *    pr : parsresult*, pointer to structure to receive the result
-*   mfs : MonoFormule*, pointer to first element of array of monoformules 
+*   mfs : MonoFormule*, pointer to first element of array of monoformules
 *  nbmf : int,  number of MonoFormules in array
 * return
 *  int, errorcode
@@ -2114,7 +2114,7 @@ static int lav_CreateOutput(parsresult* pr, MonoFormule* mfs, int nbmf, char* ex
 
 /* ------------------ lavaan_parse -------------------------------------
 * main parsing function for lavaan models
-* parameters 
+* parameters
 *              pr : parsresult*, pointer to parsresult structure to receive result of parser
 *           model : const char *, string with model to be parsed
 *        errorpos : int*, position of error in model or line where internal error occurred
@@ -2137,7 +2137,7 @@ int lav_parse(parsresult* pr, const char* model, int* errorpos, const char** res
 	int errornumber = 0;
 	int j = 0;
 	bool oke;
-	char* extramem = NULL; // extra memory for step 3 strings "0", "1", "(", ")", "fixed" and "*" 
+	char* extramem = NULL; // extra memory for step 3 strings "0", "1", "(", ")", "fixed" and "*"
 	while (strcmp(reservedwords[j], "\a") != 0) j++;
 	ReservedWords = lav_sl_from_array(reservedwords, j, true, &oke);
 	TokenLL* formules = lav_Tokenize(model, &nbf, &error);
