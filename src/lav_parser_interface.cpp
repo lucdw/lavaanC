@@ -12,16 +12,16 @@ SEXP lav_eval(char* expression, int* error)
   SEXP cmdSexp, cmdexpr, ans = R_NilValue;
   ParseStatus status;
   cmdSexp = PROTECT(Rf_allocVector(STRSXP, 1));
-  SET_STRING_ELT(cmdSexp, 0, mkChar(expression));
+  SET_STRING_ELT(cmdSexp, 0, Rf_mkChar(expression));
   cmdexpr = PROTECT(R_ParseVector(cmdSexp, -1, &status, R_NilValue));
   if (status != PARSE_OK) {
     UNPROTECT(2);
     *error = 1;
     return ans;
   }
-  /* Loop is needed here as EXPSEXP will be of length > 1 */
-  ans = PROTECT(Rf_allocVector(VECSXP, length(cmdexpr)));
-  for(int i = 0; i < length(cmdexpr); i++)
+  /* Loop is needed here as EXPSEXP will be of Rf_length > 1 */
+  ans = PROTECT(Rf_allocVector(VECSXP, Rf_length(cmdexpr)));
+  for(int i = 0; i < Rf_length(cmdexpr); i++)
     SET_VECTOR_ELT(ans, i, Rf_eval(VECTOR_ELT(cmdexpr, i), R_GlobalEnv));
   UNPROTECT(3);
   return ans;
@@ -63,7 +63,7 @@ char* lav_varstostring(const varvec* vv, int* error, int* numericpossible) {
         UNPROTECT(1);
         return NULL;
       }
-      if (isNumeric(value)) {
+      if (Rf_isNumeric(value)) {
         sprintf(a, "%g", REAL(value)[0]);
         if (!lav_sb_add(&sb, a)) {
           *error = (SPE_MALLOC << 16) + __LINE__;
@@ -111,10 +111,10 @@ SEXP lav_varstoSEXPstring(const varvec* vv, int* error) {
     switch (vv->varvecarr[j].vartype) {
     case 1:
       sprintf(a, "%g", vv->varvecarr[j].vardata.numvalue);
-      SET_STRING_ELT(retval, j, mkChar(a));
+      SET_STRING_ELT(retval, j, Rf_mkChar(a));
       break;
     case 2:
-      SET_STRING_ELT(retval, j, mkChar(vv->varvecarr[j].vardata.textvalue));
+      SET_STRING_ELT(retval, j, Rf_mkChar(vv->varvecarr[j].vardata.textvalue));
       break;
     case 3:
       value = PROTECT(lav_eval(vv->varvecarr[j].vardata.textvalue, error));
@@ -122,16 +122,16 @@ SEXP lav_varstoSEXPstring(const varvec* vv, int* error) {
         UNPROTECT(1);
         return NULL;
       }
-      if (isNumeric(value)) {
+      if (Rf_isNumeric(value)) {
         sprintf(a, "%g", REAL(value)[0]);
-        SET_STRING_ELT(retval, j, mkChar(a));
+        SET_STRING_ELT(retval, j, Rf_mkChar(a));
       } else {
         SET_STRING_ELT(retval, j, value);
       }
       UNPROTECT(1);
       break;
     case 4:
-      SET_STRING_ELT(retval, j, mkChar("NA"));
+      SET_STRING_ELT(retval, j, Rf_mkChar("NA"));
       break;
     }
   }
@@ -191,7 +191,7 @@ SEXP lav_parse_interface(SEXP model) {
     "TRUE", "FALSE", "NULL", "Inf", "NaN", "NA", "NA_integer_", "NA_real_",
     "NA_complex_", "NA_character_", "..." ,"..1" ,"..2", "..3", "..4", "..5",
     "\a" };
-  if (!isString(model) || length(model) != 1)  error("model is not a single string");
+  if (!Rf_isString(model) || Rf_length(model) != 1)  Rf_error("model is not a single string");
   int fout;
   int foutpos;
   int nprotect = 0;
@@ -309,12 +309,12 @@ SEXP lav_parse_interface(SEXP model) {
       // fill modifier and flat elements
       int modif1i = 0;
       if (fl->modifiers->fixed != NULL) {
-        SET_STRING_ELT(fixed, flati, mkChar(lav_varstostring(fl->modifiers->fixed, &fout, &numericpossible)));
+        SET_STRING_ELT(fixed, flati, Rf_mkChar(lav_varstostring(fl->modifiers->fixed, &fout, &numericpossible)));
         if (numericpossible == 0) {
           fout = (SPE_INVALIDEXPRTYP << 24) + fl->modifiers->fixed->varvecarr->varpos;
         } else {
           SET_VECTOR_ELT(modif1, modif1i, lav_varstoSEXPdouble(fl->modifiers->fixed, &fout));
-          SET_VECTOR_ELT(modif1lab, modif1i, mkString("fixed"));
+          SET_VECTOR_ELT(modif1lab, modif1i, Rf_mkString("fixed"));
         }
         modif1i++;
         if (fout!= 0) {
@@ -323,12 +323,12 @@ SEXP lav_parse_interface(SEXP model) {
         }
       }
       if (fl->modifiers->start != NULL) {
-        SET_STRING_ELT(start, flati, mkChar(lav_varstostring(fl->modifiers->start, &fout, &numericpossible)));
+        SET_STRING_ELT(start, flati, Rf_mkChar(lav_varstostring(fl->modifiers->start, &fout, &numericpossible)));
         if (numericpossible == 0) {
           fout = (SPE_INVALIDEXPRTYP << 24) + fl->modifiers->start->varvecarr->varpos;
         } else {
           SET_VECTOR_ELT(modif1, modif1i, lav_varstoSEXPdouble(fl->modifiers->start, &fout));
-          SET_VECTOR_ELT(modif1lab, modif1i, mkString("start"));
+          SET_VECTOR_ELT(modif1lab, modif1i, Rf_mkString("start"));
         }
         modif1i++;
         if (fout!= 0) {
@@ -337,12 +337,12 @@ SEXP lav_parse_interface(SEXP model) {
         }
       }
       if (fl->modifiers->lower != NULL) {
-        SET_STRING_ELT(lower, flati, mkChar(lav_varstostring(fl->modifiers->lower, &fout, &numericpossible)));
+        SET_STRING_ELT(lower, flati, Rf_mkChar(lav_varstostring(fl->modifiers->lower, &fout, &numericpossible)));
         if (numericpossible == 0) {
           fout = (SPE_INVALIDEXPRTYP << 24) + fl->modifiers->lower->varvecarr->varpos;
         } else {
           SET_VECTOR_ELT(modif1, modif1i, lav_varstoSEXPdouble(fl->modifiers->lower, &fout));
-          SET_VECTOR_ELT(modif1lab, modif1i, mkString("lower"));
+          SET_VECTOR_ELT(modif1lab, modif1i, Rf_mkString("lower"));
         }
         modif1i++;
         if (fout!= 0) {
@@ -351,12 +351,12 @@ SEXP lav_parse_interface(SEXP model) {
         }
       }
       if (fl->modifiers->upper != NULL) {
-        SET_STRING_ELT(upper, flati, mkChar(lav_varstostring(fl->modifiers->upper, &fout, &numericpossible)));
+        SET_STRING_ELT(upper, flati, Rf_mkChar(lav_varstostring(fl->modifiers->upper, &fout, &numericpossible)));
         if (numericpossible == 0) {
           fout = (SPE_INVALIDEXPRTYP << 24) + fl->modifiers->upper->varvecarr->varpos;
         } else {
           SET_VECTOR_ELT(modif1, modif1i, lav_varstoSEXPdouble(fl->modifiers->upper, &fout));
-          SET_VECTOR_ELT(modif1lab, modif1i, mkString("upper"));
+          SET_VECTOR_ELT(modif1lab, modif1i, Rf_mkString("upper"));
         }
         modif1i++;
         if (fout!= 0) {
@@ -365,9 +365,9 @@ SEXP lav_parse_interface(SEXP model) {
         }
       }
       if (fl->modifiers->label != NULL) {
-        SET_STRING_ELT(label, flati, mkChar(lav_varstostring(fl->modifiers->label, &fout, &numericpossible)));
+        SET_STRING_ELT(label, flati, Rf_mkChar(lav_varstostring(fl->modifiers->label, &fout, &numericpossible)));
         SET_VECTOR_ELT(modif1, modif1i, lav_varstoSEXPstring(fl->modifiers->label, &fout));
-        SET_VECTOR_ELT(modif1lab, modif1i, mkString("label"));
+        SET_VECTOR_ELT(modif1lab, modif1i, Rf_mkString("label"));
         modif1i++;
         if (fout!= 0) {
           UNPROTECT(nprotect);
@@ -375,12 +375,12 @@ SEXP lav_parse_interface(SEXP model) {
         }
       }
       if (fl->modifiers->prior != NULL) {
-        SET_STRING_ELT(prior, flati, mkChar(lav_varstostring(fl->modifiers->prior, &fout, &numericpossible)));
+        SET_STRING_ELT(prior, flati, Rf_mkChar(lav_varstostring(fl->modifiers->prior, &fout, &numericpossible)));
         if (numericpossible == 0) {
           fout = (SPE_INVALIDEXPRTYP << 24) + fl->modifiers->prior->varvecarr->varpos;
         } else {
           SET_VECTOR_ELT(modif1, modif1i, lav_varstoSEXPdouble(fl->modifiers->prior, &fout));
-          SET_VECTOR_ELT(modif1lab, modif1i, mkString("prior"));
+          SET_VECTOR_ELT(modif1lab, modif1i, Rf_mkString("prior"));
         }
         modif1i++;
         if (fout!= 0) {
@@ -389,9 +389,9 @@ SEXP lav_parse_interface(SEXP model) {
         }
       }
       if (fl->modifiers->efa != NULL) {
-        SET_STRING_ELT(efa, flati, mkChar(fl->modifiers->efa));
-        SET_VECTOR_ELT(modif1, modif1i, mkString(fl->modifiers->efa));
-        SET_VECTOR_ELT(modif1lab, modif1i, mkString("efa"));
+        SET_STRING_ELT(efa, flati, Rf_mkChar(fl->modifiers->efa));
+        SET_VECTOR_ELT(modif1, modif1i, Rf_mkString(fl->modifiers->efa));
+        SET_VECTOR_ELT(modif1lab, modif1i, Rf_mkString("efa"));
         modif1i++;
         if (fout!= 0) {
           UNPROTECT(nprotect);
@@ -399,22 +399,22 @@ SEXP lav_parse_interface(SEXP model) {
         }
       }
       if (fl->modifiers->rv != NULL) {
-        SET_STRING_ELT(rv, flati, mkChar(lav_varstostring(fl->modifiers->rv, &fout, &numericpossible)));
+        SET_STRING_ELT(rv, flati, Rf_mkChar(lav_varstostring(fl->modifiers->rv, &fout, &numericpossible)));
         SET_VECTOR_ELT(modif1, modif1i, lav_varstoSEXPstring(fl->modifiers->rv, &fout));
-        SET_VECTOR_ELT(modif1lab, modif1i, mkString("rv"));
+        SET_VECTOR_ELT(modif1lab, modif1i, Rf_mkString("rv"));
         modif1i++;
         if (fout!= 0) {
           UNPROTECT(nprotect);
           return lav_errorhere(fout>>24, fout & 0xFFFFFF, model);
         }
       }
-      setAttrib(modif1, R_NamesSymbol, modif1lab);
+      Rf_setAttrib(modif1, R_NamesSymbol, modif1lab);
       SET_VECTOR_ELT(modifiers, modi, modif1);
       modi++;
     }
-    SET_STRING_ELT(lhs, flati, mkChar(fl->lhs));
-    SET_STRING_ELT(op, flati, mkChar(fl->op));
-    SET_STRING_ELT(rhs, flati, mkChar(fl->rhs));
+    SET_STRING_ELT(lhs, flati, Rf_mkChar(fl->lhs));
+    SET_STRING_ELT(op, flati, Rf_mkChar(fl->op));
+    SET_STRING_ELT(rhs, flati, Rf_mkChar(fl->rhs));
     INTEGER(modidx)[flati] = (fl->modifiers == NULL) ? 0 : modi;
     INTEGER(block)[flati] = fl->block;
     flati++;
@@ -430,15 +430,15 @@ SEXP lav_parse_interface(SEXP model) {
     nprotect++;
     constr1lab = PROTECT(Rf_allocVector(VECSXP, 4));
     nprotect++;
-    SET_VECTOR_ELT(constr1, 0, mkString(cop->op));
-    SET_VECTOR_ELT(constr1, 1, mkString(cop->lhs));
-    SET_VECTOR_ELT(constr1, 2, mkString(cop->rhs));
-    SET_VECTOR_ELT(constr1, 3, ScalarInteger(cop->user));
-    SET_VECTOR_ELT(constr1lab, 0, mkString("op"));
-    SET_VECTOR_ELT(constr1lab, 1, mkString("lhs"));
-    SET_VECTOR_ELT(constr1lab, 2, mkString("rhs"));
-    SET_VECTOR_ELT(constr1lab, 3, mkString("user"));
-    setAttrib(constr1, R_NamesSymbol, constr1lab);
+    SET_VECTOR_ELT(constr1, 0, Rf_mkString(cop->op));
+    SET_VECTOR_ELT(constr1, 1, Rf_mkString(cop->lhs));
+    SET_VECTOR_ELT(constr1, 2, Rf_mkString(cop->rhs));
+    SET_VECTOR_ELT(constr1, 3, Rf_ScalarInteger(cop->user));
+    SET_VECTOR_ELT(constr1lab, 0, Rf_mkString("op"));
+    SET_VECTOR_ELT(constr1lab, 1, Rf_mkString("lhs"));
+    SET_VECTOR_ELT(constr1lab, 2, Rf_mkString("rhs"));
+    SET_VECTOR_ELT(constr1lab, 3, Rf_mkString("user"));
+    Rf_setAttrib(constr1, R_NamesSymbol, constr1lab);
     SET_VECTOR_ELT(constraints, constri, constr1);
     constri++;
     cop = cop->next;
@@ -474,23 +474,23 @@ SEXP lav_parse_interface(SEXP model) {
   SET_VECTOR_ELT(answer, 12, rv);
   SEXP thenames = PROTECT(Rf_allocVector(VECSXP, 13));
   nprotect++;
-  SET_VECTOR_ELT(thenames, 0, mkString("lhs"));
-  SET_VECTOR_ELT(thenames, 1, mkString("op"));
-  SET_VECTOR_ELT(thenames, 2, mkString("rhs"));
-  SET_VECTOR_ELT(thenames, 3, mkString("mod.idx"));
-  SET_VECTOR_ELT(thenames, 4, mkString("block"));
-  SET_VECTOR_ELT(thenames, 5, mkString("fixed"));
-  SET_VECTOR_ELT(thenames, 6, mkString("start"));
-  SET_VECTOR_ELT(thenames, 7, mkString("lower"));
-  SET_VECTOR_ELT(thenames, 8, mkString("upper"));
-  SET_VECTOR_ELT(thenames, 9, mkString("label"));
-  SET_VECTOR_ELT(thenames, 10, mkString("prior"));
-  SET_VECTOR_ELT(thenames, 11, mkString("efa"));
-  SET_VECTOR_ELT(thenames, 12, mkString("rv"));
-  setAttrib(answer, R_NamesSymbol, thenames);
-  setAttrib(answer, install("modifiers"), modifiers);
-  setAttrib(answer, install("constraints"), constraints);
-  setAttrib(answer, install("warns"), warns);
+  SET_VECTOR_ELT(thenames, 0, Rf_mkString("lhs"));
+  SET_VECTOR_ELT(thenames, 1, Rf_mkString("op"));
+  SET_VECTOR_ELT(thenames, 2, Rf_mkString("rhs"));
+  SET_VECTOR_ELT(thenames, 3, Rf_mkString("mod.idx"));
+  SET_VECTOR_ELT(thenames, 4, Rf_mkString("block"));
+  SET_VECTOR_ELT(thenames, 5, Rf_mkString("fixed"));
+  SET_VECTOR_ELT(thenames, 6, Rf_mkString("start"));
+  SET_VECTOR_ELT(thenames, 7, Rf_mkString("lower"));
+  SET_VECTOR_ELT(thenames, 8, Rf_mkString("upper"));
+  SET_VECTOR_ELT(thenames, 9, Rf_mkString("label"));
+  SET_VECTOR_ELT(thenames, 10, Rf_mkString("prior"));
+  SET_VECTOR_ELT(thenames, 11, Rf_mkString("efa"));
+  SET_VECTOR_ELT(thenames, 12, Rf_mkString("rv"));
+  Rf_setAttrib(answer, R_NamesSymbol, thenames);
+  Rf_setAttrib(answer, Rf_install("modifiers"), modifiers);
+  Rf_setAttrib(answer, Rf_install("constraints"), constraints);
+  Rf_setAttrib(answer, Rf_install("warns"), warns);
   /* ending */
   lav_freeparsresult(&resultaat); // free returnvalue from lav_parse
   UNPROTECT(nprotect);
