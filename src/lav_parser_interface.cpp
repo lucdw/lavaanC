@@ -1,6 +1,8 @@
 #include <R.h>
 #include <Rinternals.h>
 #include <R_ext/Parse.h>
+#include <R_ext/PrtUtil.h>
+#include <R_ext/Print.h>
 #include <string.h>
 #include <stdlib.h>
 #include "lav_Util.h"
@@ -19,12 +21,13 @@ SEXP lav_eval(char* expression, int* error)
     *error = 1;
     return ans;
   }
-  /* Loop is needed here as EXPSEXP will be of Rf_length > 1 */
+  /* Loop is needed here as EXPSEXP will be of length > 1 */
   ans = PROTECT(Rf_allocVector(VECSXP, Rf_length(cmdexpr)));
   for(int i = 0; i < Rf_length(cmdexpr); i++)
     SET_VECTOR_ELT(ans, i, Rf_eval(VECTOR_ELT(cmdexpr, i), R_GlobalEnv));
   UNPROTECT(3);
-  return ans;
+  // Rf_PrintValue(VECTOR_ELT(ans, 0));
+  return VECTOR_ELT(ans, 0);
 }
 
 /* ------------------------------  help functions for the modifiers ----------*/
@@ -73,7 +76,8 @@ char* lav_varstostring(const varvec* vv, int* error, int* numericpossible) {
           return NULL;
         }
       } else {
-      if (!lav_sb_add(&sb, CHAR(STRING_ELT(value, 0)))){
+ //       Rprintf("Is list : %d, is string %d\n", Rf_isNewList(value), Rf_isString(value));
+      if (!lav_sb_add(&sb, CHAR(VECTOR_ELT(value, 0)))){
           *error = (SPE_MALLOC << 16) + __LINE__;
           UNPROTECT(1);
           return NULL;
@@ -158,7 +162,7 @@ SEXP lav_varstoSEXPdouble(const varvec* vv, int* error) {
         UNPROTECT(1);
         return NULL;
       }
-      SET_VECTOR_ELT(retval, j, value);
+      rans[j] = REAL(value)[0];
       UNPROTECT(1);
       break;
     case 4:

@@ -749,7 +749,7 @@ static TokenLL* lav_Tokenize(const char* modelsrc, int* nbf, int* error) {
 				(modelsrc[pos] == ' ' || modelsrc[pos] == '\t' || modelsrc[pos] == '\r')) pos++;
 			break;
 		default:
-			if (curchar < 0 || isalpha(curchar) || curchar == '.' || curchar == '_') { // identifiers
+			if (curchar < 0 || isalpha(curchar) || (curchar == '.' && !isdigit(nextchar)) || curchar == '_') { // identifiers
 				do {
 					if ((curchar & 0xF8) == 0xF0) pos += 4;
 					else if ((curchar & 0xF0) == 0xE0) pos += 3;
@@ -1453,7 +1453,7 @@ static varvec* lav_parse_get_modifier_r(MonoFormule mf, mftokenp from, modifiert
 		if (from->next->tekst[0] == '(') {
 			if (welke == 8) {
 				if (endtok->tekst[0] == '*') {
-					if (from->next->next->typ == T_NUMLITERAL) welke = M_FIXED;
+					if (from->next->next->typ == T_NUMLITERAL || strcmp(from->next->next->tekst,"NA") == 0) welke = M_FIXED;
 					else welke = M_LABEL;
 				}
 				else welke = M_START;
