@@ -5,10 +5,10 @@
 #include <stdbool.h>
 #include <R_ext/Rdynload.h>
 
-SEXP lav_parse_interface(SEXP model);
+SEXP lav_parse_interface(SEXP model, SEXP debug);
 
 static const R_CallMethodDef callmethods[] = {
-  {"lav_parse_interface", (DL_FUNC) &lav_parse_interface, 1},
+  {"lav_parse_interface", (DL_FUNC) &lav_parse_interface, 2},
   {NULL, NULL, 0}
 };
 
