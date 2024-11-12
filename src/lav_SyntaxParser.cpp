@@ -1,277 +1,159 @@
-#include <stdio.h>
-#include <ctype.h>
+#include <cstdio>
+#include <cctype>
 #include <memory.h>
-#include <string.h>
-#include <stdlib.h>
-#include <assert.h>
+#include <cstring>
+#include <cstdlib>
+#include <string>
+#include <iostream>
 #include "lav_SyntaxParser.h"
-#include "lav_Util.h"
+#include "lav_SmallStringList.h"
+using namespace std;
+namespace lavaan {
+/* ---------------- lookup utility functions ------------------------------- */
+int lav_lookup(const char* str1, const std::string* str2);
+int lav_lookupc(char c, const char* str);
+std::string lav_tolower(const std::string a);
+bool lav_validnumlit(const std::string a);
 
-#define CHECK_OK(lijn)  if (!oke) return (SPE_MALLOC << 24) + lijn
-
-typedef enum tokentype{
+enum tokentype {
 	T_IDENTIFIER, T_NUMLITERAL, T_STRINGLITERAL, T_SYMBOL, T_LAVAANOPERATOR, T_NEWLINE
-} tokentype;
-typedef struct token {
-	struct token* next;
-	struct token* prior;
-	char* tekst;
-	int pos;
-	int len;
-	tokentype typ;
-	int formula;
-} token;
-typedef struct token* tokenp;
-typedef struct TokenLL {
-	tokenp first;
-	tokenp last;
-} TokenLL;
-#define NEW_TOKENLL {(tokenp)0, (tokenp)0}
-
-typedef struct mftoken {
-	struct mftoken* next;
-	struct mftoken* prior;
-	char* tekst;
-	int pos;
-	tokentype typ;
-} mftoken;
-typedef mftoken* mftokenp;
-typedef struct MonoFormule {
-	mftokenp first;
-	mftokenp last;
-	mftokenp lavoperator;
-} MonoFormule;
-#define NEW_MF {(void *)0, (void *)0, (void *)0}
-
-typedef enum modifiertype {
-	M_EFA, M_FIXED, M_START, M_LOWER, M_UPPER, M_LABEL, M_PRIOR, M_RV, M_UNKNOWN
-} modifiertype;
-typedef enum operators {
-	OP_MEASURE, OP_FORM, OP_SCALE, OP_CORRELATE, OP_REGRESSED_ON, OP_EQ, OP_LT, OP_GT, OP_DEFINE, OP_BLOCK, OP_THRESHOLD, OP_GROUPWEIGHT
-} operators;
-struct modifier {
-	struct modifier* next;
-	modifiertype typ;
-	char* modifierstring;
-	varvec modifiernumval;
 };
-static warnp statwarnp = NULL;
+enum operators {
+	OP_MEASURE, OP_FORM, OP_SCALE, OP_CORRELATE, OP_REGRESSED_ON, OP_EQ, OP_LT, OP_GT, OP_DEFINE, OP_BLOCK, OP_THRESHOLD, OP_GROUPWEIGHT
+};
 
-static StringList ReservedWords;
+const char* modTypeNames[] = { "unknown", "efa", "fixed", "start", "lower", "upper", "label", "prior", "rv" };
 
-/* ----------------- warn_init ----------------------------------
-* prepare statwarnp (pointer to array with warnings) for acceptance
-* of warnings, removing old ones if necessary
-*/
-static void lav_warn_init(void) {
-	while (statwarnp != NULL) {
-		if (statwarnp->next != NULL) {
-			warnp tmp = statwarnp->next;
-			statwarnp->next = tmp->next;
-			free(tmp);
+/* ==================== tokens (step 1 & 2) ================================================ */
+struct token {
+	token(int position, int length, tokentype tt) : pos(position), len(length), typ(tt) {}
+	token(const token&) = delete;
+	token& operator=(const token&) = delete;
+	~token() { if (tekst != nullptr) delete[] tekst; }
+	token* next = nullptr;
+	token* prior = nullptr;
+	char* tekst = nullptr; // token is allways owner of the tekst item
+	int pos = 0;
+	int len = 0;
+	tokentype typ = T_NEWLINE;
+	int formula = 0;
+	void SetTekst(string modelsrc) {
+		if (tekst != nullptr) delete[] tekst;
+		tekst = new char[len + 1];
+		strcpy(tekst, modelsrc.substr(pos, len).c_str());
+	}
+	void SetNewTekst(string text) {
+		if (tekst != nullptr) delete[] tekst;
+		size_t textlen = text.length();
+		tekst = new char[textlen + 1];
+		strcpy(tekst, text.c_str());
+	}
+};
+typedef token* tokenp;
+class TokenLL {
+private:
+	bool owner = false;
+public:
+	TokenLL() = default;
+	TokenLL(const TokenLL& from) : owner(false), first(from.first), last(from.last) {}
+	TokenLL& operator=(const TokenLL& from) {
+		if (&from != this) {
+			owner = false;
+			first = from.first;
+			last = from.last;
+		}
+		return *this;
+	}
+	tokenp first = nullptr;
+	tokenp last = nullptr;
+	void add(int position, int length, tokentype tt) {
+		tokenp newone = new token(position, length, tt);
+		if (first == nullptr) {
+			newone->prior = nullptr;
+			first = newone;
+			last = newone;
 		}
 		else {
-			free(statwarnp);
-			statwarnp = NULL;
+			newone->prior = last;
+			last->next = newone;
+			last = newone;
 		}
 	}
-}
-/* ----------------  lav_warn_add ------------------------------------
-* add warning
-* parameters
-* warncode : int, code of the warning
-*  warnpos : int, position where warn relates to
-* return
-* errorcode, possibly SPE_MALLOC
-*/
-static int lav_warn_add(int warncode, int warnpos) {
-	warnp newone = (warnp)malloc(sizeof(warnelem));
-	if (newone == NULL) return (SPE_MALLOC << 24) + __LINE__;
-	newone->next = NULL;
-	newone->warncode = warncode;
-	newone->warnpos = warnpos;
-	if (statwarnp == NULL) {
-		statwarnp = newone;
-	}
-	else {
-		warnp curwarn = statwarnp;
-		while (curwarn->next != NULL) curwarn = curwarn->next;
-		curwarn->next = newone;
-	}
-	return 0;
-}
-
-/* --------------AddToken-------------------------------------------------
-* function to add a struct token to a linked list of tokens
-* parameters
-*    tokens : TokenLL*, pointer to list
-*  position : int, position of the token in the model to store in the struct
-*    length : int, length to the token in the model to store in the struct
-* tokentype : tokentype, type of the token to add
-* return
-* int, errorcode (possibly SPE_MALLOC)
-*/
-static int lav_token_add(TokenLL* tokens, int position, int length, tokentype tt) {
-	assert(length >= 0);
-	tokenp newone = (tokenp)malloc(sizeof(token));
-	if (newone != NULL) {
-		newone->pos = position;
-		newone->len = length;
-		newone->typ = tt;
-		newone->formula = 0;
-		newone->tekst = NULL;
-		newone->next = NULL;
-		if (tokens->first == NULL) {
-			newone->prior = NULL;
-			tokens->first = newone;
-			tokens->last = newone;
+	void remove(tokenp which) {
+		if (first == which && last == which) {
+			first = nullptr;
+			last = nullptr;
+		}
+		else if (first == which) {
+			first = which->next;
+			first->prior = nullptr;
+		}
+		else if (last == which) {
+			last = which->prior;
+			last->next = nullptr;
 		}
 		else {
-			newone->prior = tokens->last;
-			tokens->last->next = newone;
-			tokens->last = newone;
+			which->prior->next = which->next;
+			which->next->prior = which->prior;
 		}
-		return 0;
+		delete which;
+		return;
 	}
-	else {
-		return (SPE_MALLOC << 24) + __LINE__;
-	}
-}
-/* -----------------setnewtekst----------------------------------------------
-* function to set the tekst item of a token to a new value
-* parameters
-*    tok : tokenp, pointer to the token to modify
-*   text : the new string
-* return
-* int, error code (possibly SPE_MALLOC)
-*/
-static int lav_setnewtekst(tokenp tok, const char* text) {
-	free(tok->tekst);
-	size_t textlen = strlen(text);
-	tok->tekst = (char *)malloc(textlen + 1);
-	if (tok->tekst != NULL) {
-		strcpy(tok->tekst, text);
-		return 0;
-	}
-	else {
-		return (SPE_MALLOC << 24) + __LINE__;
-	}
-}
+	void SetOwner(bool newstatus) { owner = newstatus; }
+	~TokenLL() { if (owner) while (first != nullptr) remove(last); }
+};
 
-/* -----------------settekst----------------------------------------------
-* function to set the tekst item of a token by copying from the model source
-* parameters
-*      tok : tokenp, pointer to the token to modify
-* modelsrc : the model string
-* return
-* void
-*/
-static int lav_settekst(tokenp tok, const char* modelsrc) {
-	free(tok->tekst);
-	tok->tekst = (char *)malloc((size_t)tok->len + 1);
-	if (tok->tekst != NULL) {
-		strncpy(tok->tekst, modelsrc + tok->pos, tok->len);
-		tok->tekst[tok->len] = 0;
-		return 0;
-	}
-	else {
-		return (SPE_MALLOC << 24) + __LINE__;
-	}
-}
-/* -----------------RemoveToken------------------------------------
-* function to remove a token from the linked list
-* parameters
-* tokens : pointer to TokenLL
-*  which : pointer to token to remove from list
-* return
-* void
-* remarks
-* 1. this function free's the memory allocated for the tekst item in the token to remove
-*      and the memory for this token itself
-* 2. the function does NOT check that the token is in the list !
-*/
-static void lav_token_remove(TokenLL* tokens, tokenp which) {
-	free(which->tekst);
-	if (tokens->first == which && tokens->last == which) {
-		tokens->first = NULL;
-		tokens->last = NULL;
-	}
-	else if (tokens->first == which) {
-		tokens->first = which->next;
-		tokens->first->prior = NULL;
-	}
-	else if (tokens->last == which) {
-		tokens->last = which->prior;
-		tokens->last->next = NULL;
-	}
-	else {
-		which->prior->next = which->next;
-		which->next->prior = which->prior;
-	}
-	free(which);
-	return;
-}
-/* ---------------------TokenLL_free---------------------
-* function to remove all tokens of a tokens linked list
-* parameters
-* tokens: TokenLL*, pointer to token linked list
-* return
-* void
-*/
-static void lav_TokenLL_free(TokenLL* tokens) {
-	while (tokens->first != NULL) lav_token_remove(tokens, tokens->last);
-}
-/* DEBUGGING : check tokens */
-static void lav_CheckTokens(TokenLL* tokens) {
-#ifdef _DEBUG
-	if (tokens->first == NULL && tokens->last == NULL) return;
-	assert((tokens->first == NULL) == (tokens->last == NULL));
-	for (tokenp curtok = tokens->first; curtok->next != NULL; curtok = curtok->next) {
-		assert(curtok->next->prior == curtok);
-	}
-	assert(tokens->first->prior == NULL);
-	assert(tokens->last->next == NULL);
-#endif // _DEBUG
-}
+/* ==================== mftokens (step 2 & 3) ================================================ */
 
-/* ------------------- InsertMfToken ------------------------------------------------
-* function to add a mftoken to a MonoFormule
-* parameters
-*        mf : MonoFormule*, pointer to monoformule
-*     where : mftokenp, pointer to mftoken where new item should be inserted or NULL (append)
-*  position : int, position of the token in the model to store in the struct
-*      text : const char *, text of the token to store in the struct
-* tokentype : tokentype, type of the token
-* return
-* int, errorcode (possibly SPE_MALLOC)
-*/
-static int lav_mftoken_insert(MonoFormule* mf, mftokenp where, int position, char* text, tokentype tt) {
-	assert(mf->first != NULL || where == NULL);
-	mftokenp newone = (mftokenp)malloc(sizeof(mftoken));
-	if (newone != NULL) {
-		newone->pos = position;
-		newone->typ = tt;
-		newone->tekst = text;
-		if (tt == T_LAVAANOPERATOR) mf->lavoperator = newone;
-		if (mf->first == NULL) {
-			newone->next = NULL;
-			newone->prior = NULL;
-			mf->first = newone;
-			mf->last = newone;
+struct mftoken {
+	mftoken(const int position, const tokentype tt, char* text) : tekst(text), pos(position), typ(tt) {}
+	mftoken* next = nullptr;
+	mftoken* prior = nullptr;
+	char* tekst = nullptr; // mftoken is never owner of the tekst !
+	int pos = 0;
+	tokentype typ = T_NEWLINE;
+};
+typedef mftoken* mftokenp;
+class MonoFormule {
+private:
+	bool owner = false;
+public:
+	MonoFormule() = default;
+	MonoFormule(const MonoFormule& from) : owner(false), first(from.first), last(from.last), lavoperator(from.lavoperator) {}
+	MonoFormule& operator=(const MonoFormule& from) {
+		if (&from != this) {
+			owner = false;
+			first = from.first;
+			last = from.last;
+			lavoperator = from.lavoperator;
+		}
+		return *this;
+	}
+	mftokenp first = nullptr;
+	mftokenp last = nullptr;
+	mftokenp lavoperator = nullptr;
+	void insert(const mftokenp where, const int position, char* text, const tokentype tt) {
+		mftokenp newone = new mftoken(position, tt, text);
+		if (tt == T_LAVAANOPERATOR) lavoperator = newone;
+		if (first == nullptr) {
+			newone->next = nullptr;
+			newone->prior = nullptr;
+			first = newone;
+			last = newone;
 		}
 		else {
-			if (where == NULL) { /* append */
-				newone->next = NULL;
-				newone->prior = mf->last;
-				mf->last->next = newone;
-				mf->last = newone;
+			if (where == nullptr) { /* append */
+				newone->next = nullptr;
+				newone->prior = last;
+				last->next = newone;
+				last = newone;
 			}
 			else {
-				if (where == mf->first) {
-					newone->prior = NULL;
-					newone->next = mf->first;
-					mf->first->prior = newone;
-					mf->first = newone;
+				if (where == first) {
+					newone->prior = nullptr;
+					newone->next = first;
+					first->prior = newone;
+					first = newone;
 				}
 				else {
 					newone->prior = where->prior;
@@ -281,435 +163,308 @@ static int lav_mftoken_insert(MonoFormule* mf, mftokenp where, int position, cha
 				}
 			}
 		}
-		return 0;
 	}
-	else {
-		return (SPE_MALLOC << 24) + __LINE__;
-	}
-}
-/* -----------------RemoveMfToken------------------------------------
-* function to remove an mftoken from the linked list
-* parameters
-*     mf : pointer to MonoFormule
-*  which : pointer to mftoken to remove from list
-* return
-* void
-* remark
-* 1. this function ONLY free's the memory allocated for this mftoken itself
-* 2. the function does NOT check that the mftoken is in the list !
-*/
-static void lav_mftoken_remove(MonoFormule* mf, mftokenp which) {
-	if (mf->lavoperator == which) mf->lavoperator = NULL;
-	if (mf->first == which && mf->last == which) {
-		mf->first = NULL;
-		mf->last = NULL;
-	}
-	else if (mf->first == which) {
-		mf->first = which->next;
-		mf->first->prior = NULL;
-	}
-	else if (mf->last == which) {
-		mf->last = which->prior;
-		mf->last->next = NULL;
-	}
-	else {
-		which->prior->next = which->next;
-		which->next->prior = which->prior;
-	}
-	free(which);
-	return;
-}
-/* ---------------------MonoFormule_free---------------------
-* function to remove all mftokens from a MonoFormule
-* parameters
-* mf : MonoFormule*, pointer to MonoFormule
-* return
-* void
-*/
-static void lav_MonoFormule_free(MonoFormule* mf) {
-	while (mf->first != NULL) lav_mftoken_remove(mf, mf->last);
-}
-
-/* DEBUGGING : check mftokens */
-static void lav_CheckMfTokens(MonoFormule* mf) {
-#ifdef _DEBUG
-	if (mf->first == NULL && mf->last == NULL) return;
-	assert(mf->lavoperator != NULL);
-	assert((mf->first == NULL) == (mf->last == NULL));
-	for (mftokenp curtok = mf->first; curtok->next != NULL; curtok = curtok->next) {
-		assert(curtok->next->prior == curtok);
-	}
-	assert(mf->first->prior == NULL);
-	assert(mf->last->next == NULL);
-#endif // _DEBUG
-}
-
-
-
-/* ----------------- var_free ------------------------------------
-* function to free all items in a varvec
-* parameters
-* vv : varvec*, pointer to item
-* return void
-*/
-static void lav_var_free(varvec* vv) {
-	if (vv == NULL) return;
-	if (vv->varvecarr == NULL) return;
-	for (int j = 0; j < vv->length; j++) {
-		if (vv->varvecarr[j].vartype & 2) free(vv->varvecarr[j].vardata.textvalue);
-	}
-	free(vv->varvecarr); vv->varvecarr = NULL;
-}
-/* ----------------- var_add -------------------------------------
-* function to add a variant to vector
-* parameters
-*       vv : varvec*, pointer to varvec
-*    value : double, value to store in new element if typ = 1
-*     text : char *, string to store in new elemnt if type = 2 or 3
-*      typ : type of variant elemnt to add: 1=float, 2=string, 3=string expression, 4= NA
-*      pos : position of item in model source
-* return
-* int,  error code
-*/
-static int lav_var_add(varvec* vv, double value, const char* text, char typ, int pos) {
-	if (vv->capacity == vv->length) {
-		vv->capacity = (vv->length == 0) ? 1 : vv->capacity << 1;
-		var1* tmp = (var1 *)calloc(vv->capacity, sizeof(var1));
-		if (tmp == NULL) return (SPE_MALLOC << 24) + __LINE__;
-		if (vv->length) {
-			memcpy(tmp, vv->varvecarr, vv->length * sizeof(var1));
-			free(vv->varvecarr);
+	void remove(mftokenp which) {
+		if (lavoperator == which) lavoperator = nullptr;
+		if (first == which && last == which) {
+			first = nullptr;
+			last = nullptr;
 		}
-		vv->varvecarr = tmp;
+		else if (first == which) {
+			first = which->next;
+			first->prior = nullptr;
+		}
+		else if (last == which) {
+			last = which->prior;
+			last->next = nullptr;
+		}
+		else {
+			which->prior->next = which->next;
+			which->next->prior = which->prior;
+		}
+		delete which;
+		return;
 	}
-	var1* var1tmp = &vv->varvecarr[vv->length];
-	var1tmp->vartype = typ;
-	var1tmp->varpos = pos;
-	if (typ & 2) {
-		size_t allen = strlen(text) + 1;
-		var1tmp->vardata.textvalue = (char*)malloc(allen);
-		if (var1tmp->vardata.textvalue == NULL) return (SPE_MALLOC << 24) + __LINE__;
-		strcpy(var1tmp->vardata.textvalue, text);
-	}
-	else {
-		if (typ == 1) var1tmp->vardata.numvalue = value;
-	}
-	vv->length++;
-	return 0;
-}
-/* ----------------- var_addfloat -------------------------------------
-* function to add a variant with  a double value float
-* parameters
-*    vv : varvec *
-* value : double, value to store in new item
-* return
-* int, error code
+	void SetOwner(bool newstatus) { owner = newstatus; }
+	~MonoFormule() { if (owner) while (first != nullptr) remove(last); }
+};
+
+/* ==================== parser interface (step 3 and main function) ================================================ */
+
+/* -------------------- modVar + modDbl + modNa + modTxt + modExpr -------------------------------------------------
+modVar is the base class for modDbl, modNa, modTxt and modExpr, kind of Variant type in a linked list
 */
-static int lav_var_addfloat(varvec* vv, double value, int pos) {
-	return lav_var_add(vv, value, NULL, 1, pos);
+modVar::modVar() : _type(Unknown), next(nullptr), varpos(0) {}
+modVar::modVar(modVarType t, int pos) : _type(t), next(nullptr), varpos(pos) {}
+modVarType modVar::GetType() const { return _type; }
+modVar::~modVar() {}
+modDbl::modDbl(double value) : modVar(Dbl), _value(value) {}
+const double modDbl::Value() { return _value; }
+const char* modDbl::Tekst() { return nullptr; }
+modNa::modNa() : modVar(Na) {}
+const double modNa::Value() { return 0.0; }
+const char* modNa::Tekst() { return "NA"; }
+modTxt::modTxt(const char* value) : modVar(Txt), _value(nullptr) {
+	_value = new char[strlen(value) + 1];
+	strcpy(_value, value);
 }
-/* ----------------- var_addtext -------------------------------------
-* function to add a variant with a char* value
-* parameters
-*   vv : varvec *
-* text : char *, string to store in new item
-* return
-* int, error code
-*/
-static int lav_var_addtext(varvec* vv, const char* text, int pos) {
-	return lav_var_add(vv, 0, text, 2, pos);
+const double modTxt::Value() { return 0.0; }
+const char* modTxt::Tekst() { return _value; }
+modTxt::~modTxt() { delete[]_value;}
+modExpr::modExpr(const char* value) : modVar(Expr), _value(nullptr) {
+	_value = new char[strlen(value) + 1];
+	strcpy(_value, value);
 }
-/* ----------------- var_addexpr -------------------------------------
-* function to add a variant with a char* value
-* parameters
-*   vv : varvec *
-* text : char *, string to store in new item
-* return
-* int, error code
+const double modExpr::Value() { return 0.0; }
+const char* modExpr::Tekst() { return _value; }
+modExpr::~modExpr() { delete []_value;}
+
+/* ----------------------- Modifier ---------------------------------------------------------------------------------
+Modifier is element of linked list of Modifiers, pointing to a linked list of modVar
 */
-static int lav_var_addexpr(varvec* vv, const char* text, int pos) {
-	return lav_var_add(vv, 0, text, 3, pos);
+Modifier::Modifier() : lastone(nullptr), type(mUnknown), firstone(nullptr), next(nullptr) {} // default constructor
+Modifier::Modifier(modType t) : lastone(nullptr), type(t), firstone(nullptr), next(nullptr) {}
+void Modifier::add(double x, int pos) {               // add a modDbl
+	modDbl* md = new modDbl(x);
+	md->varpos = pos;
+	if (firstone == nullptr) firstone = md;
+	else lastone->next = md;
+	lastone = md;
 }
-/* ----------------- var_addNA -------------------------------------
-* function to add a variant type NA
-* parameters
-*   vv : varvec *
-* return
-* int, error code
-*/
-static int lav_var_addNA(varvec* vv, int pos) {
-	return lav_var_add(vv, 0, NULL, 4, pos);
+void Modifier::add(const char* x, int pos) {          // add a modTxt
+	modTxt* mt = new modTxt(x);
+	mt->varpos = pos;
+	if (firstone == nullptr) firstone = mt;
+	else lastone->next = mt;
+	lastone = mt;
 }
-#ifdef _DEBUG
-/* ----------------- var_tostring ---------------------------------
-* transform contents of a var, excluding positions, to a string
-*/
-static char* lav_var_tostring(const varvec* vv, int* error) {
-	char a[15];
-	bool oke = true;
-	StringBuilder sb = lav_sb_init(&oke);
-	if (!oke) {
-		*error = (SPE_MALLOC << 24) + __LINE__;
-		return NULL;
-	}
-	for (int j = 0; j < vv->length; j++) {
-		switch (vv->varvecarr[j].vartype) {
-		case 1:
-			sprintf(a, "%14f", vv->varvecarr[j].vardata.numvalue);
-			if (!lav_sb_add(&sb, a)) {
-				*error = (SPE_MALLOC << 24) + __LINE__;
-				return NULL;
-			}
+void Modifier::addNa(int pos) {                       // add a modNA
+	modNa* mna = new modNa();
+	mna->varpos = pos;
+	if (firstone == nullptr) firstone = mna;
+	else lastone->next = mna;
+	lastone = mna;
+}
+void Modifier::addExpr(const char* x, int pos) {      // add a modExpr
+	modExpr* mt = new modExpr(x);
+	mt->varpos = pos;
+	if (firstone == nullptr) firstone = mt;
+	else lastone->next = mt;
+	lastone = mt;
+}
+string Modifier::to_string() const {
+	string sb("");
+	modVar* mv = firstone;
+	while (mv != nullptr) {
+		switch (mv->GetType()) {
+		case Dbl:
+			sb += std::to_string(mv->Value());
 			break;
-		case 2:
-		case 3:
-			if (!lav_sb_add(&sb, "\"")) {
-				*error = (SPE_MALLOC << 24) + __LINE__;
-				return NULL;
-			}
-			if (!lav_sb_add(&sb, vv->varvecarr[j].vardata.textvalue)) {
-				*error = (SPE_MALLOC << 24) + __LINE__;
-				return NULL;
-			}
-			if (!lav_sb_add(&sb, "\"")) {
-				*error = (SPE_MALLOC << 24) + __LINE__;
-				return NULL;
-			}
+		case Txt:
+			sb += "\"";
+			sb += mv->Tekst();
+			sb += "\"";
 			break;
-		case 4:
-			if (!lav_sb_add(&sb, "NA")) {
-				*error = (SPE_MALLOC << 24) + __LINE__;
-				return NULL;
-			}
+		case Expr:
+			sb += "<";
+			sb += mv->Tekst();
+			sb += ">";
+			break;
+		case Na:
+			sb += "NA";
+			break;
+		case Unknown:
 			break;
 		}
-		if (j < vv->length - 1) {
-			if (!lav_sb_add(&sb, ",")) {
-				*error = (SPE_MALLOC << 24) + __LINE__;
-				return NULL;
+		if (mv->next != nullptr) sb += ",";
+		mv = mv->next;
+	}
+	return sb;
+}
+void Modifier::SetOwner(bool newstatus) { owner = newstatus; }
+Modifier::~Modifier() {
+	if (!owner) return;
+	modVar* mv = firstone;
+	while (mv != nullptr) {
+		modVar* mvn = mv->next;
+		delete mv;
+		mv = mvn;
+	}
+}
+
+/* ------------------------------------ flatelem ------------------------------------------------------------------
+flatelem is a flat element of the return value
+*/
+flatelem::flatelem(const char* Lhs, const char* Op, const char* Rhs, const int Block) {
+	int l = strlen(Lhs);
+	lhs = new char[l + 1];
+	strcpy(lhs, Lhs);
+	l = strlen(Op);
+	op = new char[l + 1];
+	strcpy(op, Op);
+	l = strlen(Rhs);
+	rhs = new char[l + 1];
+	strcpy(rhs, Rhs);
+	block = Block;
+}
+void flatelem::Add(Modifier* m) { // add a modifier
+	Modifier* curm = modifiers;
+	Modifier* lastone = nullptr;
+	m->SetOwner(true);
+	while (curm != nullptr) {
+		if (curm->type == m->type) {
+			if (lastone == nullptr) {
+				modifiers = m;
 			}
+			else {
+				lastone->next = m;
+			}
+			m->next = curm->next;
+			delete curm;
+			return;
 		}
+		lastone = curm;
+		curm = curm->next;
 	}
-	char* retval = lav_sb_value(&sb, &oke);
-	if (!oke) {
-		*error = (SPE_MALLOC << 24) + __LINE__;
-		return NULL;
+	if (lastone == nullptr) modifiers = m;
+	else lastone->next = m;
+}
+Modifier* flatelem::Get(modType mtype) const { // get modifier given its type
+	bool IsPresent = false;
+	Modifier* curm = modifiers;
+	while (curm != nullptr) {
+		if (curm->type == mtype) {
+			IsPresent = true;
+			break;
+		}
+		curm = curm->next;
 	}
-	return retval;
-}
-#endif
-/* ----------------- mod_free ------------------------------------
-* function to free all items in a modelem
-* parameters
-*        item : modp, pointer to item
-* keepstrings : int, if not zero do NOT free string elements in the items
-* return void
-*/
-static void lav_mod_free(modp item) {
-	if (item == NULL) return;
-	free(item->efa); item->efa = NULL;
-	lav_var_free(item->fixed); item->fixed = NULL;
-	lav_var_free(item->start); item->start = NULL;
-	lav_var_free(item->lower); item->lower = NULL;
-	lav_var_free(item->upper); item->upper = NULL;
-	lav_var_free(item->label); item->label = NULL;
-	lav_var_free(item->prior); item->prior = NULL;
-	lav_var_free(item->rv); item->rv = NULL;
-}
-/* ----------------- flat_free ------------------------------------
-* function to free all items in a flat linked list, this function
-* also calls mod_free for the modifiers
-* parameters
-*    firstone : flatp, first item of the linked list
-* return void
-*/
-static void lav_flat_free(flatp firstone) {
-	while (firstone != NULL) {
-		lav_mod_free(firstone->modifiers);
-		flatp todelete = firstone;
-		firstone = firstone->next;
-		free(todelete);
+	if (IsPresent) {
+		return curm;
+	}
+	else {
+		return nullptr;
 	}
 }
-/* ------------------- flat_add -----------------------
-* function to add a flatelem at end of list or create a new flatelem linked list
-* parameters
-* firstone : constrp, current first item of list or NULL
-*      lhs : const char*, value to store in new items lhs
-*       op : const char*, value to store in new items op
-*      rhs : const char*, value to store in new items rhs
-*    block : int
-*    error : int*, errorcode if malloc fails for one of the items
-* return
-* flatp, item added or NULL if malloc error and firstone was NULL
-* avoid leaks:
-* the string pointed to by the char* parameters are copied, so the caller is allowed to free them after the call!!!
-* free the linked list when no longer needed (use flat_free)
-* free the pointers to the text-items when no longer needed
+flatelem::~flatelem() {
+	if (lhs != nullptr) delete lhs;
+	if (op != nullptr) delete op;
+	if (rhs != nullptr) delete rhs;
+	Modifier* curm = modifiers;
+	while (curm != nullptr) {
+		Modifier* nextm = curm->next;
+		delete curm;
+		curm = nextm;
+	}
+}
+
+/* -------------------------------- constrelem ------------------------------------------------------------------
+constr is a constraint element of the return value
 */
-static flatp lav_flat_add(flatp firstone, const char* lhs, const char* op, const char* rhs, int block, int* error) {
-	flatp newone = (flatp)malloc(sizeof(flatelem));
-	if (newone == NULL) {
-		*error = (SPE_MALLOC << 24) + __LINE__;
-		return firstone;
+constrelem::constrelem(const char* Lhs, const char* Op, const char* Rhs, const int User, const int Pos) {
+	int l = strlen(Lhs);
+	lhs = new char[l + 1];
+	strcpy(lhs, Lhs);
+	l = strlen(Op);
+	op = new char[l + 1];
+	strcpy(op, Op);
+	l = strlen(Rhs);
+	rhs = new char[l + 1];
+	strcpy(rhs, Rhs);
+	user = User;
+	pos = Pos;
+}
+constrelem::~constrelem() {
+	if (lhs != nullptr) delete lhs;
+	if (op != nullptr) delete op;
+	if (rhs != nullptr) delete rhs;
+}
+
+/* -------------------------------- warnings --------------------------------------------------------------------
+wrn is a warning element of the return value
+*/
+static warnelem* statwarnp = nullptr;
+warnelem::warnelem() : next(nullptr), warncode(0), warnpos(0) {}
+warnelem::warnelem(int code, int pos) : next(nullptr), warncode(code), warnpos(pos) {
+	if (statwarnp == nullptr) statwarnp = this;
+	else {
+		warnp tmpwarn = statwarnp;
+		while (tmpwarn->next != nullptr) tmpwarn = tmpwarn->next;
+		tmpwarn->next = this;
 	}
-	newone->block = block;
-	newone->next = NULL;
-	newone->modifiers = NULL;
-	size_t lengte = strlen(lhs);
-	newone->lhs = (char*)malloc(lengte + 1);
-	if (newone->lhs == NULL) {
-		free(newone);
-		*error = (SPE_MALLOC << 24) + __LINE__;
-		return firstone;
+}
+warnelem::~warnelem() {
+	if (next != nullptr) delete next;
+}
+
+
+/* ------------------------------- parsresult -------------------------------------------------------------------
+return value of the parse function
+*/
+
+parsresult::~parsresult() {
+	flatp curflat = flat;
+	while (curflat != nullptr) {
+		flatp flatn = curflat->next;
+		delete curflat;
+		curflat = flatn;
 	}
-	strcpy(newone->lhs, lhs);
-	lengte = strlen(op);
-	newone->op = (char*)malloc(lengte + 1);
-	if (newone->op == NULL) {
-		free(newone->lhs);
-		free(newone);
-		*error = (SPE_MALLOC << 24) + __LINE__;
-		return firstone;
+	constrp curconstr = constr;
+	while (curconstr != nullptr) {
+		constrp constrn = curconstr->next;
+		delete curconstr;
+		curconstr = constrn;
 	}
-	strcpy(newone->op, op);
-	lengte = strlen(rhs);
-	newone->rhs = (char*)malloc(lengte + 1);
-	if (newone->rhs == NULL) {
-		free(newone->lhs);
-		free(newone);
-		*error = (SPE_MALLOC << 24) + __LINE__;
-		return firstone;
-	}
-	strcpy(newone->rhs, rhs);
-	if (firstone != NULL) {
-		flatp curone = firstone;
-		while (curone->next != NULL) curone = curone->next;
+	flat = nullptr;
+	constr = nullptr;
+	wrn = nullptr;
+}
+void parsresult::flat_add(const char* lhs, const char* op, const char* rhs, int block) {
+	flatp newone = new flatelem(lhs, op, rhs, block);
+	if (flat != nullptr) {
+		flatp curone = flat;
+		while (curone->next != nullptr) curone = curone->next;
 		curone->next = newone;
 	}
-	return newone;
-}
-
-/* ------------------- mod_create -----------------------
-* function to create a modelem
-* parameters
-* void
-* return
-* modp, pointer to created element or NULL (malloc error)
-* avoid leaks:
-* free the item when no longer needed (use mod_free)
-*/
-static modp lav_mod_create() {
-	modp newone = (modp)malloc(sizeof(modelem));
-	if (newone == NULL) return NULL;
-	newone->efa = NULL;
-	newone->fixed = NULL;
-	newone->label = NULL;
-	newone->lower = NULL;
-	newone->prior = NULL;
-	newone->rv = NULL;
-	newone->start = NULL;
-	newone->upper = NULL;
-	return newone;
-}
-
-/* ----------------- constr_free ------------------------------------
-* function to free all items in a constr linked list
-* parameters
-*    firstone : varll, first item of the linked list
-* keepstrings : int, if not zero do NOT free string elements (lhs, op, rhs) in the items
-* return void
-*/
-static void lav_constr_free(constrp firstone) {
-	while (firstone != NULL) {
-		free(firstone->lhs); firstone->lhs = NULL;
-		free(firstone->op); firstone->op = NULL;
-		free(firstone->rhs); firstone->rhs = NULL;
-		constrp todelete = firstone;
-		firstone = firstone->next;
-		free(todelete);
+	else {
+		flat = newone;
 	}
 }
-
-/* ------------------- constr_add -----------------------
-* function to add a constraint (constr) at end of list or create a new constraint linked list
-* parameters
-* firstone : constrp, current first item of list or NULL
-*      lhs : const char*, value to store in new items lhs
-*       op : const char*, value to store in new items op
-*      rhs : const char*, value to store in new items rhs
-* return
-* constrp, first item of list or NULL (malloc error, in this case the existing linked list is freed before returning)
-* avoid leaks:
-* the string pointed to by the char* parameters are copied, so the caller is allowed to free them after the call!!!
-* free the linked list when no longer needed (use constr_free)
-* free the pointers to the text-items when no longer needed
-*/
-
-static constrp lav_constr_add(constrp firstone, const char* lhs, const char* op, const char* rhs) {
-	constrp newone = (constrp)malloc(sizeof(constrelem));
-	if (newone == NULL) {
-		lav_constr_free(firstone);
-		return NULL;
-	}
-	if (firstone != NULL) {
-		constrp curone = firstone;
-		while (curone->next != NULL) curone = curone->next;
+void parsresult::constr_add(const char* lhs, const char* op, const char* rhs, const int user, const int pos) {
+	constrp newone = new constrelem(lhs, op, rhs, user, pos);
+	if (constr != nullptr) {
+		constrp curone = constr;
+		while (curone->next != nullptr) curone = curone->next;
 		curone->next = newone;
 	}
-	newone->user = 1;
-	newone->next = NULL;
-	size_t lengte = strlen(lhs);
-	newone->lhs = (char*)malloc(lengte + 1);
-	if (newone->lhs == NULL) {
-		lav_constr_free(firstone);
-		return NULL;
-	}
-	strcpy(newone->lhs, lhs);
-	lengte = strlen(op);
-	newone->op = (char*)malloc(lengte + 1);
-	if (newone->op == NULL) {
-		lav_constr_free(firstone);
-		return NULL;
-	}
-	strcpy(newone->op, op);
-	lengte = strlen(rhs);
-	newone->rhs = (char*)malloc(lengte + 1);
-	if (newone->rhs == NULL) {
-		lav_constr_free(firstone);
-		return NULL;
-	}
-	strcpy(newone->rhs, rhs);
-	if (firstone == NULL) {
-		return newone;
-	}
 	else {
-		return firstone;
+		constr = newone;
 	}
 }
 
-/* ---------------------Tokenize------------------------
+/* --------------------- step 1 : Tokenize------------------------
 * function to split the model source in tokens
 * parameters
 * modelsrc: const char *, string with model source
 *      nbf: int *, pointer to int receiving number of formulas
 *    error: int *, pointer to int receiving error code
 * return
-* tokenp, first item of circular list with tokens, NULL if error occurred
+* tokenLL*, first item of arrays of linked lists with tokens, nullptr if error occurred
 * remarks
 * whitespace (consisting of '\t' and ' ' and '\r'), comments (after '#' or '!' on a line)
 * and newlines ('\n' or ';') are not in the list of tokens
 * possible errors:
-* SPE_ILLNUMLIT : illegal numeric literal(e.g. 23.0ea34)
-* SPE_FORMUL1 : formule with only 1 token in it
-* SPE_EMPTYMODEL : model contains no meaningfull tokens
-* SPE_FORMUL1 : model contains formula with only 1 token in it, implying an erroneous formula
+* spe_illnumlit : illegal numeric literal(e.g. 23.0ea34)
+* spe_formul1 : formule with only 1 token in it
+* spe_emptymodel : model contains no meaningfull tokens
+* spe_formul1 : model contains formula with only 1 token in it, implying an erroneous formula
 */
-static TokenLL* lav_Tokenize(const char* modelsrc, int* nbf, int* error) {
-	*error = 0;
-	*nbf = 0;
-	size_t modellength = strlen(modelsrc);
-	TokenLL tokens = NEW_TOKENLL;
+static TokenLL* lav_Tokenize(const char* modelsrc, int& nbf, int& error) {
+	error = 0;
+	nbf = 0;
+	int modellength = (int)strlen(modelsrc);
+	TokenLL tokens;
+	tokens.SetOwner(true); // if error, ownership implies delete of tokens
 	int pos = 0;
 	int pos0;
 	char priornonspacechar = '\n';
@@ -728,7 +483,7 @@ static TokenLL* lav_Tokenize(const char* modelsrc, int* nbf, int* error) {
 		case '\n':
 		case ';':
 			while (pos < modellength && (modelsrc[pos] == '\n' || modelsrc[pos] == ';')) pos++;
-			*error = lav_token_add(&tokens, pos0, pos - pos0, T_NEWLINE);
+			tokens.add( pos0, pos - pos0, T_NEWLINE);
 			priornonspacechar = '\n';
 			break;
 			// string literals
@@ -737,7 +492,7 @@ static TokenLL* lav_Tokenize(const char* modelsrc, int* nbf, int* error) {
 			while (pos < modellength &&
 				(modelsrc[pos] != '"' || modelsrc[pos + 1] == '"' || modelsrc[pos - 1] == '\\') &&
 				modelsrc[pos] != '\n') pos++;
-			*error = lav_token_add(&tokens, pos0 + 1, pos - pos0 - 1, T_STRINGLITERAL);
+			tokens.add( pos0 + 1, pos - pos0 - 1, T_STRINGLITERAL);
 			if (modelsrc[pos] == '"') pos++;
 			priornonspacechar = '"';
 			break;
@@ -758,7 +513,7 @@ static TokenLL* lav_Tokenize(const char* modelsrc, int* nbf, int* error) {
 					if (pos < modellength) curchar = modelsrc[pos];
 				} while (pos < modellength &&
 					(curchar < 0 || isalnum(curchar) || curchar == '_' || curchar == '.'));
-				*error = lav_token_add(&tokens, pos0, pos - pos0, T_IDENTIFIER);
+				tokens.add( pos0, pos - pos0, T_IDENTIFIER);
 				priornonspacechar = 'Z'; // not really, but avoid special chars in bytes UFT-8
 			} else if ((isdigit(curchar) || 	// numeric literals
 				(lav_lookupc(curchar, "+-") && (!isdigit(priornonspacechar) && !isalpha(priornonspacechar) && !lav_lookupc(priornonspacechar, "._") && (nextchar == '.' || isdigit(nextchar)))) ||
@@ -775,7 +530,7 @@ static TokenLL* lav_Tokenize(const char* modelsrc, int* nbf, int* error) {
 					pos++;
 				}
 				if (pos >= modellength || (modelsrc[pos] != 'E' && modelsrc[pos] != 'e')) {
-					*error = lav_token_add(&tokens, pos0, pos - pos0, T_NUMLITERAL);
+					tokens.add( pos0, pos - pos0, T_NUMLITERAL);
 					priornonspacechar = modelsrc[pos-1];
 				}
 				else {
@@ -783,17 +538,17 @@ static TokenLL* lav_Tokenize(const char* modelsrc, int* nbf, int* error) {
 					if (lav_lookupc(modelsrc[pos], "-+")) pos++;
 					while (pos < modellength && isdigit(modelsrc[pos])) pos++;
 					if (isdigit(modelsrc[pos - 1])) {
-						*error = lav_token_add(&tokens, pos0, pos - pos0, T_NUMLITERAL);
+						tokens.add( pos0, pos - pos0, T_NUMLITERAL);
 						priornonspacechar = modelsrc[pos - 1];
 					}
 					else {
-						*error = (int)(SPE_ILLNUMLIT << 24) + pos0;
+						error = (int)(spe_illnumlit << 24) + pos0;
 					}
 				}
 			}
 			else if (curchar == '~' && nextchar == '*' && modelsrc[pos + 2] == '~') {
 				pos += 3;
-				*error = lav_token_add(&tokens, pos0, pos - pos0, T_LAVAANOPERATOR);
+				tokens.add( pos0, pos - pos0, T_LAVAANOPERATOR);
 				priornonspacechar = modelsrc[pos - 1];
 			}
 			else if ((curchar == '=' && (nextchar == '~' || nextchar == '=')) ||
@@ -802,88 +557,60 @@ static TokenLL* lav_Tokenize(const char* modelsrc, int* nbf, int* error) {
 				(curchar == ':' && nextchar == '='))
 			{
 				pos += 2;
-				*error = lav_token_add(&tokens, pos0, pos - pos0, T_LAVAANOPERATOR);
+				tokens.add( pos0, pos - pos0, T_LAVAANOPERATOR);
 				priornonspacechar = modelsrc[pos - 1];
 			}
 			else if (curchar == '~' || curchar == '<' || curchar == '>' ||
 				curchar == ':' || curchar == '|' || curchar == '%') {
 				pos++;
-				*error = lav_token_add(&tokens, pos0, pos - pos0, T_LAVAANOPERATOR);
+				tokens.add( pos0, pos - pos0, T_LAVAANOPERATOR);
 				priornonspacechar = modelsrc[pos - 1];
 			}
 			else {
 				pos++;
-				*error = lav_token_add(&tokens, pos0, pos - pos0, T_SYMBOL);
+				tokens.add( pos0, pos - pos0, T_SYMBOL);
 				priornonspacechar = modelsrc[pos - 1];
 			}
 			break;
 		}
-		if (*error != 0) {
-			lav_TokenLL_free(&tokens);
-			return NULL;
+		if (error != 0) {
+			return nullptr;
 		}
 	}
 	// concatenate identifiers or identifier+numliteral with only spaces in between - LDW 22 / 4 / 2024 in R code
-	if (tokens.first == NULL) {
-		*error = (int)(SPE_EMPTYMODEL << 24);
-		return NULL;
+	if (tokens.first == nullptr) {
+		error = (int)(spe_emptymodel << 24);
+		return nullptr;
 	}
 	tokenp curtok = tokens.first;
-	for (curtok = tokens.first; curtok->next != NULL; curtok = curtok->next) {
+	for (curtok = tokens.first; curtok->next != nullptr; curtok = curtok->next) {
 		if (curtok->typ == T_IDENTIFIER && (curtok->next->typ == T_IDENTIFIER || curtok->next->typ == T_NUMLITERAL)) {
 			curtok->len = curtok->next->pos - curtok->pos + curtok->next->len;
-			assert(curtok->len > 0);
-			lav_token_remove(&tokens, curtok->next);
-			*error = lav_warn_add(SPW_IDENTIFIERBLANKS, curtok->pos);
-			if (*error != 0) {
-				lav_TokenLL_free(&tokens);
-				return NULL;
-			}
-			if (curtok->next == NULL) break;
+			tokens.remove(curtok->next);
+			new warnelem(spw_identifierblanks, curtok->pos);
+			if (curtok->next == nullptr) break;
 		}
 	}
 	// set tekst items in tokens
 
-	for (curtok = tokens.first; curtok != NULL; curtok = curtok->next) {
-		*error = lav_settekst(curtok, modelsrc);
-		if (*error != 0) {
-			lav_TokenLL_free(&tokens);
-			return NULL;
-		}
+	for (curtok = tokens.first; curtok != nullptr; curtok = curtok->next) {
+		curtok->SetTekst(modelsrc);
 	}
 	// concatenate symbols "=" and "~" to lavoperator "=~", "~" and "~" to lavoperator "~~"
-	for (curtok = tokens.first; curtok->next != NULL; curtok = curtok->next) {
+	for (curtok = tokens.first; curtok->next != nullptr; curtok = curtok->next) {
 		if (strcmp(curtok->tekst, "=") == 0 && strcmp(curtok->next->tekst, "~") == 0) {
 			curtok->len = curtok->next->pos - curtok->pos + curtok->next->len;
-			assert(curtok->len > 0);
-			*error = lav_setnewtekst(curtok, "=~");
-			if (*error != 0) {
-				lav_TokenLL_free(&tokens);
-				return NULL;
-			}
+			curtok->SetNewTekst("=~");
 			curtok->typ = T_LAVAANOPERATOR;
-			*error = lav_warn_add(SPW_OPERATORBLANKS, curtok->pos);
-			if (*error != 0) {
-				lav_TokenLL_free(&tokens);
-				return NULL;
-			}
-			lav_token_remove(&tokens, curtok->next);
+			 new warnelem(spw_operatorblanks, curtok->pos);
+			tokens.remove(curtok->next);
 		}
 		else if (strcmp(curtok->tekst, "~") == 0 && strcmp(curtok->next->tekst, "~") == 0) {
 			curtok->len = curtok->next->pos - curtok->pos + curtok->next->len;
-			assert(curtok->len > 0);
-			*error = lav_setnewtekst(curtok, "~~");
-			if (*error != 0) {
-				lav_TokenLL_free(&tokens);
-				return NULL;
-			}
+			curtok->SetNewTekst("~~");
 			curtok->typ = T_LAVAANOPERATOR;
-			*error = lav_warn_add(SPW_OPERATORBLANKS, curtok->pos);
-			if (*error != 0) {
-				lav_TokenLL_free(&tokens);
-				return NULL;
-			}
-			lav_token_remove(&tokens, curtok->next);
+			 new warnelem(spw_operatorblanks, curtok->pos);
+			tokens.remove(curtok->next);
 		}
 	}
 	// set formula numbers
@@ -893,10 +620,10 @@ static TokenLL* lav_Tokenize(const char* modelsrc, int* nbf, int* error) {
 	int frm_incremented = 0;
 	int highestformula = 0;
 	curtok = tokens.first;
-	while (curtok != NULL) {
+	while (curtok != nullptr) {
 		curtok->formula = frm_nummer;
 		if (curtok->typ == T_IDENTIFIER && strcmp(curtok->tekst, "efa") == 0) frm_hasefa = 1;
-		const char* tmp[] = { "+", "-", "*", "=~", "\a" };
+		const string tmp[] = { "+", "-", "*", "=~", "\a" };
 		if (lav_lookup(curtok->tekst, tmp)) {
 			if (frm_incremented) {
 				frm_nummer--;
@@ -938,49 +665,42 @@ static TokenLL* lav_Tokenize(const char* modelsrc, int* nbf, int* error) {
 		curtok = curtok->next;
 	};
 	// remove newlines
-	tokenp volgende = NULL;
-	for (curtok = tokens.first; curtok != NULL; curtok = volgende) {
+	tokenp volgende = nullptr;
+	for (curtok = tokens.first; curtok != nullptr; curtok = volgende) {
 		volgende = curtok->next;
-		if (curtok->typ == T_NEWLINE) lav_token_remove(&tokens, curtok);
+		if (curtok->typ == T_NEWLINE) tokens.remove(curtok);
 	}
 	// split Tokenll tokens in array of TokenLL's
-	TokenLL* formules = (TokenLL *)calloc(highestformula, sizeof(TokenLL));
-	if (formules == NULL) {
-		*error = (int)(SPE_MALLOC << 24) + __LINE__;
-		lav_TokenLL_free(&tokens);
-		return NULL;
-	}
-	*nbf = highestformula;
+	TokenLL* formules = new TokenLL[highestformula];
+	nbf = highestformula;
 	int fnr = 0;
 	curtok = tokens.first;
 	do {
 		if (curtok->formula != fnr) {
 			formules[curtok->formula - 1].first = curtok;
 			if (curtok != tokens.first) { /* adapt pointers for previous formula */
-				curtok->prior->next = NULL;
+				curtok->prior->next = nullptr;
 				formules[fnr - 1].last = curtok->prior;
 				if (formules[fnr - 1].first == formules[fnr - 1].last) {
-					*error = (int)(SPE_FORMUL1 << 24) + curtok->prior->pos;
-					lav_TokenLL_free(&tokens);
-					return NULL;
+					error = (int)(spe_formul1 << 24) + curtok->prior->pos;
+					return nullptr;
 				}
-				lav_CheckTokens(&formules[fnr - 1]);
 			}
-			curtok->prior = NULL;
+			curtok->prior = nullptr;
 			fnr = curtok->formula;
 		}
-		if (curtok->next == NULL) { /* adapt pointers for last formula */
+		if (curtok->next == nullptr) { /* adapt pointers for last formula */
 			formules[fnr - 1].last = curtok;
 			if (formules[fnr - 1].first == formules[fnr - 1].last) {
-				*error = (int)(SPE_FORMUL1 << 24) + curtok->prior->pos;
-				lav_TokenLL_free(&tokens);
-				return NULL;
+				error = (int)(spe_formul1 << 24) + curtok->prior->pos;
+				return nullptr;
 			}
-			lav_CheckTokens(&formules[fnr - 1]);
 		}
 		curtok = curtok->next;
-	} while (curtok != NULL);
-	// done
+	} while (curtok != nullptr);
+	// done, transfert ownership of tokens from local LL (tokens) to array (formules[]) and return
+	tokens.SetOwner(false);
+	for (int j = 0; j < nbf; j++) formules[j].SetOwner(true);
 	return formules;
 }
 
@@ -991,43 +711,39 @@ static TokenLL* lav_Tokenize(const char* modelsrc, int* nbf, int* error) {
 * formul: TokenLL*, pointer to formula to handle
 * return
 * int, error code
-* possible error* SPE_3WAYINTERACTION : three-way or higher-order interaction terms
+* possible error* spe_3wayinteraction : three-way or higher-order interaction terms
 *
 */
-static int lav_InteractionTokens(TokenLL* formul) {
+static int lav_InteractionTokens(TokenLL& formul) {
 	int CheckInteraction = 1;
 	int error = 0;
-	for (tokenp curtok = formul->first; curtok != 0; curtok = curtok->next) {
+	for (tokenp curtok = formul.first; curtok != 0; curtok = curtok->next) {
 		if (curtok->typ == T_LAVAANOPERATOR) {
-			const char* tmp[] = { ":", "==", "<", ">", ":=", "\a" };
+			const string tmp[] = { ":", "==", "<", ">", ":=", "\a" };
 			if (lav_lookup(curtok->tekst, tmp)) CheckInteraction = 0;
 			break;
 		}
 	}
 	if (CheckInteraction) {
-		bool oke = true;
-		for (tokenp curtok = formul->first->next; curtok != NULL && curtok->next != NULL; curtok = curtok->next) {
+		for (tokenp curtok = formul.first->next; curtok != nullptr && curtok->next != nullptr; curtok = curtok->next) {
 			if (strcmp(curtok->tekst, ":") == 0 && curtok->next->typ == T_IDENTIFIER) {
-				if (curtok->next->next != NULL && strcmp(curtok->next->next->tekst, ":") == 0) {
-					return (SPE_3WAYINTERACTION << 24) + curtok->next->next->pos;
+				if (curtok->next->next != nullptr && strcmp(curtok->next->next->tekst, ":") == 0) {
+					return (spe_3wayinteraction << 24) + curtok->next->next->pos;
 				}
 				/* collapse items around colon "a" ":" "b" => "a:b" */
 				{
-					StringBuilder sb = lav_sb_init(&oke);
-					if (!oke) return (SPE_MALLOC << 24) + __LINE__;
-					if (!lav_sb_add(&sb, curtok->prior->tekst)) return (SPE_MALLOC << 24) + __LINE__;
-					if (!lav_sb_add(&sb, ":")) return (SPE_MALLOC << 24) + __LINE__;
-					if (!lav_sb_add(&sb, curtok->next->tekst)) return (SPE_MALLOC << 24) + __LINE__;
-					error = lav_setnewtekst(curtok, lav_sb_value(&sb, &oke));
-					if (!oke) return (SPE_MALLOC << 24) + __LINE__;
+					string sb("");
+					sb += curtok->prior->tekst;
+					sb += ":";
+					sb += curtok->next->tekst;
+					curtok->SetNewTekst(sb.c_str());
 					if (error) return error;
-					lav_token_remove(formul, curtok->prior);
-					lav_token_remove(formul, curtok->next);
+					formul.remove(curtok->prior);
+					formul.remove(curtok->next);
 					curtok->typ = T_IDENTIFIER;
 				}
 			}
 		}
-		lav_CheckTokens(formul);
 	}
 	return error;
 }
@@ -1038,18 +754,17 @@ static int lav_InteractionTokens(TokenLL* formul) {
 * return
 * int, error code
 */
-static int lav_RemParentheses(TokenLL* formul) {
-	if (formul->first == NULL) {
-		return (SPE_PROGERROR << 24) + __LINE__;
+static int lav_RemParentheses(TokenLL& formul) {
+	if (formul.first == nullptr) {
+		return (spe_progerror << 24) + __LINE__;
 	}
-	for (tokenp curtok = formul->first->next->next; curtok != NULL && curtok->next != NULL; curtok = curtok->next) {
+	for (tokenp curtok = formul.first->next->next; curtok != nullptr && curtok->next != nullptr; curtok = curtok->next) {
 		if (curtok->prior->tekst[0] == '(' && curtok->next->tekst[0] == ')' &&
 			curtok->prior->prior->typ != T_IDENTIFIER) {
-			lav_token_remove(formul, curtok->prior);
-			lav_token_remove(formul, curtok->next);
+			formul.remove(curtok->prior);
+			formul.remove(curtok->next);
 		}
 	}
-	lav_CheckTokens(formul);
 	return 0;
 }
 /* ---------------------Step 2 : Monoformulas------------------------
@@ -1062,12 +777,12 @@ static int lav_RemParentheses(TokenLL* formul) {
 * return
 * MonoFormule*, array of mono-formula's
 *               the length of the returned array is stored in *nbmf
-*                  NULL if error occurred
+*                  nullptr if error occurred
 * possible errors:
-*      SPE_NOOPERATOR : formula without valid lavaan lavoperator
-*     SPE_PARENTHESES : formula with left and right parentheses not matching
+*      spe_nooperator : formula without valid lavaan lavoperator
+*     spe_parentheses : formula with left and right parentheses not matching
 */
-static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int* nbmf, int* error) {
+static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int& nbmf, int& error) {
 	int aantalmf = 0;
 	int aantalplus = 0;
 	int aantalplusleft = 0;
@@ -1075,25 +790,24 @@ static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int* nbmf, int*
 	int operatorfound = 0;
 	int parentheses = 0;
 	int allowsplitting = 1;
+	tokenp curtok = nullptr;
 	/*
 	handling interaction variable types
 	 */
 	for (int j = 0; j < nbf; j++) {
-		lav_CheckTokens(&formules[j]);
-		if (formules[j].first == NULL) {
-			*error = (int)(SPE_PROGERROR << 24) + __LINE__;
-			return NULL;
+		if (formules[j].first == nullptr) {
+			error = (int)(spe_progerror << 24) + __LINE__;
+			return nullptr;
 		}
-		*error = lav_InteractionTokens(&formules[j]);
-		if (*error) return NULL;
+		error = lav_InteractionTokens(formules[j]);
+		if (error) return nullptr;
 	}
 	/*
 	remove unnecessary parentheses
 	*/
 	for (int j = 0; j < nbf; j++) {
-		lav_CheckTokens(&formules[j]);
-		*error = lav_RemParentheses(&formules[j]);
-		if (*error) return NULL;
+		error = lav_RemParentheses(formules[j]);
+		if (error) return nullptr;
 	}
 
 	/*
@@ -1102,10 +816,9 @@ static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int* nbmf, int*
 	 */
 
 	for (int j = 0; j < nbf; j++) {
-		lav_CheckTokens(&formules[j]);
-		if (formules[j].first == NULL) {
-			*error = (int)(SPE_PROGERROR << 24) + __LINE__;
-			return NULL;
+		if (formules[j].first == nullptr) {
+			error = (int)(spe_progerror << 24) + __LINE__;
+			return nullptr;
 		}
 		aantalplus = 0;
 		aantalplusleft = 0;
@@ -1113,7 +826,7 @@ static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int* nbmf, int*
 		operatorfound = 0;
 		parentheses = 0;
 		allowsplitting = 1;
-		for (tokenp curtok = formules[j].first; curtok != NULL; curtok = curtok->next) {
+		for (curtok = formules[j].first; curtok != nullptr; curtok = curtok->next) {
 			if (strcmp(curtok->tekst, "(") == 0) parentheses++;
 			if (strcmp(curtok->tekst, ")") == 0) parentheses--;
 			if (parentheses == 0) {
@@ -1122,7 +835,7 @@ static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int* nbmf, int*
 						curtok->typ = T_SYMBOL;
 					}
 					else {
-						const char* tmp1[] = {":", "==", "<", ">", ":=", "\a"};
+						const string tmp1[] = { ":", "==", "<", ">", ":=", "\a" };
 						if (lav_lookup(curtok->tekst, tmp1)) {
 							allowsplitting = 0;
 							aantalplusleft = 0;
@@ -1136,13 +849,13 @@ static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int* nbmf, int*
 			}
 		}
 		if (!operatorfound) {
-			*error = (int)(SPE_NOOPERATOR << 24) + formules[j].first->pos;
-			return NULL;
+			error = (int)(spe_nooperator << 24) + formules[j].first->pos;
+			return nullptr;
 		}
 		aantalplusright = aantalplus;
 		aantalmf += ((1 + aantalplusleft) * (1 + aantalplusright));
 	}
-	*nbmf = aantalmf;
+	nbmf = aantalmf;
 	/* move constraints and definitions to end of array
 	* (this is needed to move "simple constraints" to upper/lower modifiers
 	* in the third step of the parser!)
@@ -1150,8 +863,8 @@ static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int* nbmf, int*
 	int jloop = 0;
 	int aantal = 0;
 	while (jloop < nbf - aantal) {
-		tokenp lavoperator = NULL;
-		for (tokenp curtok = formules[jloop].first; curtok != NULL; curtok = curtok->next) {
+		tokenp lavoperator = nullptr;
+		for (curtok = formules[jloop].first; curtok != nullptr; curtok = curtok->next) {
 			if (strcmp(curtok->tekst, "(") == 0) parentheses++;
 			if (strcmp(curtok->tekst, ")") == 0) parentheses--;
 			if (parentheses == 0) {
@@ -1161,7 +874,7 @@ static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int* nbmf, int*
 				}
 			}
 		}
-		const char* tmp2[] = { "==", "<", ">", ":=", "\a" };
+		const string tmp2[] = { "==", "<", ">", ":=", "\a" };
 		if (lav_lookup(lavoperator->tekst, tmp2)) { // it is a constraint or definition
 			TokenLL conform = formules[jloop];
 			for (int jloop2 = jloop + 1; jloop2 < nbf; jloop2++) {
@@ -1176,97 +889,83 @@ static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int* nbmf, int*
 	}
 	/* split formulas (one by one) in monoformulas */
 	int mfnum = 0; /* variable to keep track of the monoformula to define */
-	MonoFormule* mfs = (MonoFormule*)calloc((size_t)aantalmf, sizeof(MonoFormule));
-	if (mfs != NULL) {
-		for (int j = 0; j < nbf; j++) {
-			TokenLL formul = formules[j];
-			lav_CheckTokens(&formul);
-			if (formul.first == NULL) {
-				*error = (int)(SPE_PROGERROR << 24) + __LINE__;
-				return NULL;
+	MonoFormule* mfs = new MonoFormule[aantalmf];
+	for (int j = 0; j < nbf; j++) {
+		TokenLL formul = formules[j];
+		if (formul.first == nullptr) {
+			error = (int)(spe_progerror << 24) + __LINE__;
+			return nullptr;
+		}
+		/* max number of plus-signs to allocate pointer arrays */
+		int maxplus = 0;
+		for (curtok = formul.first; curtok != 0; curtok = curtok->next) if (curtok->tekst[0] == '+') maxplus++;
+		/* pointer arrays to +-signs and lavoperator */
+		tokenp* leftplus = new tokenp[maxplus + 1];
+		tokenp* rightplus = new tokenp[maxplus + 1];
+		aantalplusleft = 0;
+		aantalplusright = 0;
+		operatorfound = 0;
+		parentheses = 0;
+		allowsplitting = 1;
+		for (curtok = formul.first; curtok != nullptr; curtok = curtok->next) {
+			if (strcmp(curtok->tekst, "(") == 0) {
+				parentheses++;
+				continue;
 			}
-			/* max number of plus-signs to allocate pointer arrays */
-			int maxplus = 0;
-			for (tokenp curtok = formul.first; curtok != 0; curtok = curtok->next) if (curtok->tekst[0] == '+') maxplus++;
-			/* pointer arrays to +-signs and lavoperator */
-			tokenp* leftplus = (tokenp*)calloc((size_t)maxplus + 1, sizeof(tokenp));
-			tokenp* rightplus = (tokenp*)calloc((size_t)maxplus + 1, sizeof(tokenp));
-			if (leftplus == NULL || rightplus == NULL) {
-				*error = (int)(SPE_MALLOC << 24) + __LINE__;
-				free(mfs);
-				return(NULL);
+			if (strcmp(curtok->tekst, ")") == 0) {
+				parentheses--;
+				continue;
 			}
-			aantalplusleft = 0;
-			aantalplusright = 0;
-			operatorfound = 0;
-			parentheses = 0;
-			allowsplitting = 1;
-			for (tokenp curtok = formul.first; curtok != NULL; curtok = curtok->next) {
-				if (strcmp(curtok->tekst, "(") == 0) {
-					parentheses++;
-					continue;
+			if (parentheses == 0) {
+				if (curtok->typ == T_LAVAANOPERATOR) {
+					const string tmp3[] = { ":", "==", "<", ">", ":=", "\a" };
+					if (lav_lookup(curtok->tekst, tmp3)) {
+						allowsplitting = 0;
+						aantalplusleft = 0;
+					}
+					leftplus[aantalplusleft++] = curtok;
+					rightplus[aantalplusright++] = curtok;
+					operatorfound = 1;
 				}
-				if (strcmp(curtok->tekst, ")") == 0) {
-					parentheses--;
-					continue;
-				}
-				if (parentheses == 0) {
-					if (curtok->typ == T_LAVAANOPERATOR) {
-						const char* tmp3[] = { ":", "==", "<", ">", ":=", "\a" };
-						if (lav_lookup(curtok->tekst, tmp3)) {
-							allowsplitting = 0;
-							aantalplusleft = 0;
-						}
-						leftplus[aantalplusleft++] = curtok;
-						rightplus[aantalplusright++] = curtok;
-						operatorfound = 1;
-					}
-					if (strcmp(curtok->tekst, "+") == 0 && allowsplitting) {
-						if (operatorfound) rightplus[aantalplusright++] = curtok;
-						else leftplus[aantalplusleft++] = curtok;
-					}
-				}
-			}
-			/* store monoformules */
-			tokenp oper = leftplus[aantalplusleft - 1];
-			for (int jleft = 0; jleft < aantalplusleft; jleft++) {
-				tokenp fromleft = (jleft == 0) ? formul.first : leftplus[jleft - 1]->next;
-				tokenp toleft = leftplus[jleft]->prior;
-				for (int jright = 0; jright < aantalplusright; jright++) {
-					tokenp fromright = rightplus[jright]->next;
-					tokenp toright = (jright == aantalplusright - 1) ? formul.last : rightplus[jright + 1]->prior;
-					/* store */
-					tokenp curtok = fromleft;
-					for (;;) {
-						*error = lav_mftoken_insert(&mfs[mfnum], NULL, curtok->pos, curtok->tekst, curtok->typ);
-						if (*error) return NULL; /* can only be malloc error, not freeing anything therefore */
-						if (curtok == toleft) break;
-						curtok = curtok->next;
-					}
-					*error = lav_mftoken_insert(&mfs[mfnum], NULL, oper->pos, oper->tekst, oper->typ);
-					if (*error) return NULL; /* can only be malloc error, not freeing anything therefore */
-					if (fromright != NULL) {
-						curtok = fromright;
-						for (;;) {
-							*error = lav_mftoken_insert(&mfs[mfnum], NULL, curtok->pos, curtok->tekst, curtok->typ);
-							if (*error) return NULL; /* can only be malloc error, not freeing anything therefore */
-							if (curtok == toright) break;
-							curtok = curtok->next;
-						}
-					}
-					lav_CheckMfTokens(&mfs[mfnum]);
-					mfnum++;
+				if (strcmp(curtok->tekst, "+") == 0 && allowsplitting) {
+					if (operatorfound) rightplus[aantalplusright++] = curtok;
+					else leftplus[aantalplusleft++] = curtok;
 				}
 			}
 		}
-		assert(mfnum == aantalmf);
-		*nbmf = mfnum;
-		return mfs;
+		/* store monoformules */
+		tokenp oper = leftplus[aantalplusleft - 1];
+		for (int jleft = 0; jleft < aantalplusleft; jleft++) {
+			tokenp fromleft = (jleft == 0) ? formul.first : leftplus[jleft - 1]->next;
+			tokenp toleft = leftplus[jleft]->prior;
+			for (int jright = 0; jright < aantalplusright; jright++) {
+				tokenp fromright = rightplus[jright]->next;
+				tokenp toright = (jright == aantalplusright - 1) ? formul.last : rightplus[jright + 1]->prior;
+				/* store */
+				curtok = fromleft;
+				mfs[mfnum].SetOwner(true);
+				for (;;) {
+					mfs[mfnum].insert(nullptr, curtok->pos, curtok->tekst, curtok->typ);
+					if (curtok == toleft || curtok->next == nullptr) break;
+					curtok = curtok->next;
+				}
+				mfs[mfnum].insert(nullptr, oper->pos, oper->tekst, oper->typ);
+				if (fromright != nullptr) {
+					curtok = fromright;
+					for (;;) {
+						mfs[mfnum].insert(nullptr, curtok->pos, curtok->tekst, curtok->typ);
+						if (curtok == toright) break;
+						curtok = curtok->next;
+					}
+				}
+				mfnum++;
+			}
+		}
+		delete[]leftplus;
+		delete[]rightplus;
 	}
-	else {
-		*error = (int)(SPE_MALLOC << 24) + __LINE__;
-		return NULL;
-	}
+	nbmf = mfnum;
+	return mfs;
 }
 
 /* ------------------------ lav_parse_check_valid_name ------------------------
@@ -1276,11 +975,14 @@ static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int* nbmf, int*
 * return
 * errorcode
 * possible errors:
-* SPE_INVALIDNAME : invalid identifier name
+* spe_invalidname : invalid identifier name
 */
-static int lav_parse_check_valid_name(mftokenp tok) {
-	if (lav_sl_lookup(&ReservedWords, tok->tekst)) {
-		return (SPE_INVALIDNAME << 24) + tok->pos;
+static int lav_parse_check_valid_name(mftokenp tok = nullptr, const string* reservedwords = nullptr, const int nb = 0) {
+	static SmallStringList* ReservedWords;
+	if (reservedwords != nullptr) ReservedWords = new SmallStringList(reservedwords, nb);
+	if (tok == nullptr) return 0;
+	if (ReservedWords->contains(tok->tekst)) {
+		return (spe_invalidname << 24) + tok->pos;
 	}
 	return 0;
 }
@@ -1291,53 +993,26 @@ static int lav_parse_check_valid_name(mftokenp tok) {
 *   endtok : mftokenp, last token
 *    error : int*, pointer to error code
 * return:
-* char *, pointer to created string or NULL (malloc error)
-* avoid leaks:
-* free the returned pointer when no longer needed
+* char *, pointer to created string
 */
 static char* lav_get_expression(mftokenp starttok, mftokenp endtok, int* error) {
-	char* retval = NULL;
+	char* retval = nullptr;
 	if (starttok == endtok) {
-		retval = (char *)malloc(strlen(starttok->tekst) + 1);
-		if (retval ==  NULL) {
-			*error = (int)(SPE_MALLOC << 24) + __LINE__;
-			return NULL;
-		}
+		retval = new char[strlen(starttok->tekst) + 1];
 		strcpy(retval, starttok->tekst);
 		return retval;
 	}
-	bool oke = true;
-	StringBuilder sb = lav_sb_init(&oke);
-	if (!oke) {
-		*error = (int)(SPE_MALLOC << 24) + __LINE__;
-		return NULL;
-	}
-	mftokenp curtok = starttok;
+	string sb("");
+	mftokenp curmftok = starttok;
 	for (;;) {
-		if (curtok->typ == T_STRINGLITERAL) {
-			if (!lav_sb_add(&sb, "\"")) {
-				*error = (SPE_MALLOC << 24) + __LINE__;
-				return NULL;
-			}
-		}
-		if (!lav_sb_add(&sb, curtok->tekst)) {
-			*error = (SPE_MALLOC << 24) + __LINE__;
-			return NULL;
-		}
-		if (curtok->typ == T_STRINGLITERAL) {
-			if (!lav_sb_add(&sb, "\"")) {
-				*error = (SPE_MALLOC << 24) + __LINE__;
-				return NULL;
-			}
-		}
-		if (curtok == endtok) break;
-		curtok = curtok->next;
+		if (curmftok->typ == T_STRINGLITERAL) sb += "\"";
+		sb += curmftok->tekst;
+		if (curmftok->typ == T_STRINGLITERAL) sb += "\"";
+		if (curmftok == endtok) break;
+		curmftok = curmftok->next;
 	}
-	retval = lav_sb_value(&sb, &oke);
-	if (!oke) {
-		*error = (SPE_MALLOC << 24) + __LINE__;
-		return NULL;
-	}
+	retval = new char[sb.length()];
+	strcpy(retval, sb.c_str());
 	return retval;
 }
 /* ------------ lav_parse_operator ----------------------
@@ -1350,7 +1025,7 @@ static char* lav_get_expression(mftokenp starttok, mftokenp endtok, int* error) 
 static operators lav_parse_operator(char* text) {
 	/* OP_MEASURE, OP_FORM, OP_SCALE, OP_CORRELATE, OP_REGRESSED_ON, OP_EQ, OP_LT, OP_GT, OP_DEFINE, OP_BLOCK, OP_THRESHOLD, OP_GROUPWEIGHT
 			 "=~",    "<~",    "~*~",         "~~",             "~",  "==",   "<",   ">",      ":=",      ":",        "\\|",            "%" */
-	const char* oprs[] = { "=~", "<~", "~*~", "~~", "~", "==", "<", ">", ":=", ":", "\\|", "%", "\a" };
+	const string oprs[] = { "=~", "<~", "~*~", "~~", "~", "==", "<", ">", ":=", ":", "\\|", "%", "\a" };
 	return (operators)(lav_lookup(text, oprs) - 1);
 }
 /* ----------------------- lav_parse_get_modifier_l ---------------------
@@ -1359,11 +1034,11 @@ static operators lav_parse_operator(char* text) {
 *    mf : MonoFormule
 * error : int*, to store error code
 * return
-* char*, string with efa specification; NULL if error occurred
+* char*, string with efa specification; nullptr if error occurred
 * possible errors:
-* SPE_INVALIDLHS : invalid lhs modifier
+* spe_invalidlhs : invalid lhs modifier
 */
-static char* lav_parse_get_modifier_l(MonoFormule mf, int* error) {
+static Modifier* lav_parse_get_modifier_l(MonoFormule mf, int* error) {
 	/*
 	# only 1 possibility : efa ( expression-resulting-in-char ) *
 	#                                        identifier lavoperator ... (rhs) ...
@@ -1372,29 +1047,32 @@ static char* lav_parse_get_modifier_l(MonoFormule mf, int* error) {
 		strcmp(mf.first->next->tekst, "(") == 0 &&
 		strcmp(mf.lavoperator->prior->prior->prior->tekst, ")") == 0 &&
 		strcmp(mf.lavoperator->prior->prior->tekst, "*") == 0) {
-		return lav_get_expression(mf.first->next->next, mf.lavoperator->prior->prior->prior->prior, error);
+		Modifier* m = new Modifier(mEfa);
+		if (mf.first->next->next == mf.lavoperator->prior->prior->prior->prior) m->add(mf.first->next->next->tekst, mf.first->pos);
+		else m->addExpr(lav_get_expression(mf.first->next->next, mf.lavoperator->prior->prior->prior->prior, error), mf.first->pos);
+		return m;
 	}
-	*error = SPE_INVALIDLHS + mf.first->pos;
-	return NULL;
+	*error = spe_invalidlhs + mf.first->pos;
+	return nullptr;
 }
 
 /* ------------------------ lav_parse_get_modifier_r -------------------------
 * function to get the right modifier(s) in a mono formula
 * parameters
 *      mf : MonoFormule, mono-formula to analyse
-*    from : token to start from or NULL, meaning start from token following lavoperator
+*    from : token to start from or nullptr, meaning start from token following lavoperator
 *      mt : modifiertype*, type of modifier detected
 * endtokp : mftokenp*, pointer to last token processed by this call
 *   error : int*, pointer to int receiving error code
 * return
 * varvec *, pointer to modifier value(s)
 * possible errors:
-* SPE_INVALIDVECTOR : invalid vector specification
-*  SPE_MODNOLITORID : modifier token must be numeric literal, stringliteral or identifier
-*      SPE_MODNONUM : modifier token must be numeric literal (or NA)
-*      SPE_MODNOSTR : modifier token must be string literal
-*  SPE_INVALIDBLOCK : invalid block specification
-*   SPE_INVALIDLAST : last element of mono-formule invalid (should be identifier or numeric (for regression or measure))
+* spe_invalidvector : invalid vector specification
+*  spe_modnolitorid : modifier token must be numeric literal, stringliteral or identifier
+*      spe_modnonum : modifier token must be numeric literal (or NA)
+*      spe_modnostr : modifier token must be string literal
+*  spe_invalidblock : invalid block specification
+*   spe_invalidlast : last element of mono-formule invalid (should be identifier or numeric (for regression or measure))
 *
 		# possibilities
 		# stringliteral|identifier * identifier|numliteral
@@ -1405,23 +1083,16 @@ static char* lav_parse_get_modifier_l(MonoFormule mf, int* error) {
 		# ==> literals before * or ? can be replaced by an expression (to be evaluated in calling program, e.g. R)
 		#     resulting in correct type (cannot be checked here)
 */
-static varvec* lav_parse_get_modifier_r(MonoFormule mf, mftokenp from, modifiertype* mt, mftokenp* endtokp, int* error) {
-	varvec* retval = (varvec*)malloc(sizeof(varvec));
-	if (retval == 0) {
-		*error = (int)(SPE_MALLOC << 24) + __LINE__;
-		return NULL;
-	}
-	retval->varvecarr = NULL;
-	retval->capacity = 0;
-	retval->length = 0;
-	if (from == NULL) from = mf.lavoperator->next;
+static Modifier* lav_parse_get_modifier_r(MonoFormule mf, mftokenp from, mftokenp* endtokp, int* error) {
+	Modifier* retval = nullptr;
+	if (from == nullptr) from = mf.lavoperator->next;
 	/* locate end of current modifier: symbol "*" or "?" when previous parentheses match */
 	mftokenp curtok = from;
 	mftokenp endtok = from;
 	int parentheses = 0;
 	int commaspresent = 0; /* to know if we have to check for vectors ;-) */
 	for (;;) {
-		if (curtok == NULL) { /* no modifier found */
+		if (curtok == nullptr) { /* no modifier found */
 			return retval;
 		}
 		if (parentheses == 0 && curtok->typ == T_SYMBOL && (curtok->tekst[0] == '*' || curtok->tekst[0] == '?')) {
@@ -1437,150 +1108,147 @@ static varvec* lav_parse_get_modifier_r(MonoFormule mf, mftokenp from, modifiert
 	if (commaspresent) {
 		// check for fixed|start|lower|...(c(.*)) ==> remove tokens "c", "(" and ")"
 		mftokenp toklab = from->next;
-		/* typedef enum {M_EFA, M_FIXED, M_START, M_LOWER, M_UPPER, M_LABEL, M_PRIOR, M_RV} modifiertype; */
-		const char* tmp1[] = { "fixed", "start", "lower", "upper", "label", "prior", "rv", "c", "\a" };
-		modifiertype welke = (modifiertype)lav_lookup(from->tekst, tmp1);
-		if (strcmp(from->tekst, "equal") == 0) welke = M_LABEL;
+		const string tmp1[] = { "fixed", "start", "lower", "upper", "label", "prior", "rv", "c", "\a" };
+		int w = lav_lookup(from->tekst, tmp1);
+		modType welke = mUnknown;
+		if (w > 0 && w < 8) welke = (modType)(1 + w);
+		if (strcmp(from->tekst, "equal") == 0) welke = mLabel;
 		if (welke && welke < 8 && from->next->tekst[0] == '(' && strcmp(from->next->next->tekst, "c") == 0 && from->next->next->next->tekst[0] == '(') {
 			mftokenp toktmp = from->next->next->next->next;
 			while (toktmp->next->tekst[0] != ')') toktmp = toktmp->next->next;
-			lav_mftoken_remove(&mf, toktmp->next);            // )
-			lav_mftoken_remove(&mf, from->next->next->next);  // (
-			lav_mftoken_remove(&mf, from->next->next);        // c
+			mf.remove(toktmp->next);            // )
+			mf.remove(from->next->next->next);  // (
+			mf.remove(from->next->next);        // c
 		}
 		// check for vectors c(...), start(...), fixed(...), ...
 		toklab = from->next;
 		if (from->next->tekst[0] == '(') {
-			if (welke == 8) {
+			if (w == 8) {
 				if (endtok->tekst[0] == '*') {
-					if (from->next->next->typ == T_NUMLITERAL || strcmp(from->next->next->tekst,"NA") == 0) welke = M_FIXED;
-					else welke = M_LABEL;
+					if (from->next->next->typ == T_NUMLITERAL || strcmp(from->next->next->tekst, "NA") == 0) welke = mFixed;
+					else welke = mLabel;
 				}
-				else welke = M_START;
+				else welke = mStart;
 			}
-			if (welke) {
-				*mt = welke;
+			if (w) {
+				retval = new Modifier(welke);
 				toklab = from->next->next;
 				if (toklab->typ == T_NUMLITERAL) {
-					*error = lav_var_addfloat(retval, atof(toklab->tekst), toklab->pos);
+					retval->add(atof(toklab->tekst), toklab->pos);
 				}
 				else if (strcmp(toklab->tekst, "NA") == 0) {
-					*error = lav_var_addNA(retval, toklab->pos);
+					retval->addNa(toklab->pos);
 				}
 				else {
-					*error = lav_var_addtext(retval, toklab->tekst, toklab->pos);
+					retval->add(toklab->tekst, toklab->pos);
 				}
 				while (strcmp(toklab->next->tekst, ",") == 0 && *error == 0) {
 					toklab = toklab->next->next;
 					if (toklab->typ == T_NUMLITERAL) {
-						*error = lav_var_addfloat(retval, atof(toklab->tekst), toklab->pos);
+						retval->add(atof(toklab->tekst), toklab->pos);
 					}
 					else if (strcmp(toklab->tekst, "NA") == 0) {
-						*error = lav_var_addNA(retval, toklab->pos);
+						retval->addNa(toklab->pos);
 					}
 					else {
-						*error = lav_var_addtext(retval, toklab->tekst, toklab->pos);
+						retval->add(toklab->tekst, toklab->pos);
 					}
 				}
 				if (*error) {
-					lav_var_free(retval);
 					return retval;
 				}
 				if (strcmp(toklab->next->tekst, ")") != 0) {
-					*error = (int)(SPE_INVALIDVECTOR << 24) + from->pos;
-					lav_var_free(retval);
+					*error = (int)(spe_invalidvector << 24) + from->pos;
 				}
 				return retval;
 			}
 		}
 	}
 	if (strcmp(endtok->tekst, "?") == 0) { /* startvalue specified with '?' */
-		*mt = M_START;
+		retval = new Modifier(mStart);
 		if (from->next == endtok && from->typ == T_NUMLITERAL) {
-			*error = lav_var_addfloat(retval, atof(from->tekst), from->pos);
+			retval->add(atof(from->tekst), from->pos);
 		}
 		else {
-			*error = lav_var_addexpr(retval, lav_get_expression(from, endtok->prior, error), from->pos);
+			retval->addExpr(lav_get_expression(from, endtok->prior, error), from->pos);
 		}
-		if (*error) lav_var_free(retval);
 		return retval;
 	}
 	if (from->next == endtok) { /* there is only one token in the modifier */
 		int returnok = 0;
 		if (from->typ == T_NUMLITERAL) {
-			*mt = M_FIXED;
+			retval = new Modifier(mFixed);
 			returnok = 1;
-			*error = lav_var_addfloat(retval, atof(from->tekst), from->pos);
+			retval->add(atof(from->tekst), from->pos);
 		}
 		if (strcmp(from->tekst, "NA") == 0) {
-			*mt = M_FIXED;
+			retval = new Modifier(mFixed);
 			returnok = 1;
-			*error = lav_var_addNA(retval, from->pos);
+			retval->addNa(from->pos);
 		}
 		else {
 			if (from->typ == T_STRINGLITERAL || from->typ == T_IDENTIFIER) {
-				*mt = M_LABEL;
+				if (from->typ == T_IDENTIFIER) *error = lav_parse_check_valid_name(from);
+				retval = new Modifier(mLabel);
 				returnok = 1;
-				*error = lav_var_addtext(retval, from->tekst, from->pos);
+				retval->add(from->tekst, from->pos);
 			}
 		}
-		if (!returnok) *error = (int)(SPE_MODNOLITORID << 24) + from->pos;
+		if (!returnok) *error = (int)(spe_modnolitorid << 24) + from->pos;
 		if (*error) return retval;
 		return retval;
 	}
 	if (strcmp(from->next->tekst, "(") == 0 && strcmp(endtok->prior->tekst, ")") == 0) {
 		/* format something([something]+) */
-		const char* tmp2[] = { "fixed", "start", "lower", "upper", "label", "prior", "rv", "c", "\a" };
-		modifiertype welke = (modifiertype)lav_lookup(from->tekst, tmp2);
-		if (strcmp(from->tekst, "equal") == 0) welke = M_LABEL;
+		const string tmp2[] = { "fixed", "start", "lower", "upper", "label", "prior", "rv", "\a" };
+		int w = lav_lookup(from->tekst, tmp2);
+		modType welke = mUnknown;
+		if (w > 0) welke = (modType)(1 + w);
+		if (strcmp(from->tekst, "equal") == 0) welke = mLabel;
 		switch (welke) {
-		case M_FIXED:
-		case M_START:
-		case M_UPPER:
-		case M_LOWER:
-		case M_PRIOR:
+		case mFixed:
+		case mStart:
+		case mUpper:
+		case mLower:
+		case mPrior:
 			if (from->next->next->next == endtok->prior) { /* there is only one token between the parentheses */
 				curtok = from->next->next;
 				int returnok = 0;
 				if (curtok->typ == T_NUMLITERAL) {
-					*mt = welke;
+					retval = new Modifier(welke);
 					returnok = 1;
-					*error = lav_var_addfloat(retval, atof(curtok->tekst), curtok->pos);
+					retval->add(atof(curtok->tekst), curtok->pos);
 				}
 				if (strcmp(curtok->tekst, "NA") == 0) {
-					*mt = welke;
+					retval = new Modifier(welke);
 					returnok = 1;
-					*error = lav_var_addNA(retval, curtok->pos);
+					retval->addNa(curtok->pos);
 				}
-				if (!returnok) *error = (int)(SPE_MODNONUM << 24) + from->pos;
-				if (*error) lav_var_free(retval);
+				if (!returnok) *error = (int)(spe_modnonum << 24) + from->pos;
 				return retval;
 			}
 			else { /* more than one token between the parentheses */
-				*mt = welke;
-				*error = lav_var_addexpr(retval, lav_get_expression(from->next->next, endtok->prior->prior, error), curtok->pos);
-				if (*error) lav_var_free(retval);
+				retval = new Modifier(welke);
+				retval->addExpr(lav_get_expression(from->next->next, endtok->prior->prior, error), curtok->pos);
 				return retval;
 			}
 			break;
-		case M_LABEL:
-		case M_RV:
+		case mLabel:
+		case mRv:
 			if (from->next->next->next == endtok->prior) { /* there is only one token between the parentheses */
 				curtok = from->next->next;
 				if (curtok->typ == T_STRINGLITERAL) {
-					*mt = welke;
-					*error = lav_var_addtext(retval, curtok->tekst, curtok->pos);
+					retval = new Modifier(welke);
+					retval->add(curtok->tekst, curtok->pos);
 				}
 				else {
-					*error = SPE_MODNOSTR + curtok->pos;
+					*error = (int)(spe_modnostr << 24) + curtok->pos;
 				}
-				if (*error) lav_var_free(retval);
 				return retval;
 			}
 			else { /* more than one token between the parentheses */
-				*mt = welke;
-				*error = lav_var_addexpr(retval, lav_get_expression(from->next->next, endtok->prior->prior, error), from->next->next->pos);
-				if (*error) lav_var_free(retval);
+				retval = new Modifier(welke);
+				retval->addExpr(lav_get_expression(from->next->next, endtok->prior->prior, error), from->next->next->pos);
 				return retval;
 			}
 			break;
@@ -1589,9 +1257,8 @@ static varvec* lav_parse_get_modifier_r(MonoFormule mf, mftokenp from, modifiert
 		}
 	}
 	/* unknown syntax, suppose it's an expression leading to numeric value as FIXED modifier*/
-	*mt = M_FIXED;
-	*error = lav_var_addexpr(retval, lav_get_expression(from, endtok->prior, error), from->pos);
-	if (*error) lav_var_free(retval);
+	retval = new Modifier(mFixed);
+	retval->addExpr(lav_get_expression(from, endtok->prior, error), from->pos);
 	return retval;
 }
 /* ------------------- lav_simple_constraints ------------
@@ -1602,48 +1269,45 @@ static varvec* lav_parse_get_modifier_r(MonoFormule mf, mftokenp from, modifiert
 * return
 * void
 */
-int lav_simple_constraints(parsresultp pr) {
-	if (pr->constr == NULL) return 0;
-	constrp curconstr = pr->constr;
-	constrp priorconstr = NULL;
-	while (curconstr != NULL) {
+int lav_simple_constraints(parsresult& pr) {
+	if (pr.constr == nullptr) return 0;
+	constrp curconstr = pr.constr;
+	constrp priorconstr = nullptr;
+	while (curconstr != nullptr) {
 		int movetonext = 1;
 		if (strcmp(curconstr->op, "<") == 0 || strcmp(curconstr->op, ">") == 0) { // < or > lavoperator
 			if (lav_validnumlit(curconstr->rhs)) {                                // rhs valid numeric literal
 				bool labelfound = false;                                          // check lhs is label of a relation
-				flatp curflat = pr->flat;
-				double boundvalue = atof(curconstr -> rhs);
-				while (curflat != NULL) {
-					if (curflat->modifiers != NULL && curflat->modifiers->label != NULL &&
-						curflat->modifiers->label->length == 1 &&
-						strcmp(curflat->modifiers->label->varvecarr->vardata.textvalue, curconstr->lhs) == 0) {
+				flatp curflat = pr.flat;
+				double boundvalue = atof(curconstr->rhs);
+				while (curflat != nullptr) {
+					if (curflat->Get(mLabel) != nullptr &&
+						strcmp(curflat->Get(mLabel)->firstone->Tekst(), curconstr->lhs) == 0) {
 						labelfound = true;
-						varvec* retval = (varvec*)malloc(sizeof(varvec));
-						if (retval == 0) {
-							return (int)(SPE_MALLOC << 24) + __LINE__;
+						Modifier* retval = nullptr;
+						if (curconstr->op[0] == '<') {
+							retval = new Modifier(mUpper);
 						}
-						retval->varvecarr = NULL;
-						retval->capacity = 0;
-						retval->length = 0;
-						int error = lav_var_addfloat(retval, boundvalue, 0);
-						if (error) return error;
-						if (curconstr->op[0] == '<') curflat->modifiers->upper = retval;
-						else curflat->modifiers->lower = retval;
+						else {
+							retval = new Modifier(mLower);
+						}
+						retval->add(boundvalue, curconstr->pos);
+						curflat->Add(retval);
 					}
 					curflat = curflat->next;
 				}
 				if (labelfound) { // remove constraint
-					if (priorconstr != NULL) {
+					if (priorconstr != nullptr) {
 						priorconstr->next = curconstr->next;
-						curconstr->next = NULL;
-						lav_constr_free(curconstr);
+						curconstr->next = nullptr;
+						delete curconstr;
 						curconstr = priorconstr;
 					}
 					else {
-						pr->constr = curconstr->next;
-						curconstr->next = NULL;
-						lav_constr_free(curconstr);
-						curconstr = pr->constr;
+						pr.constr = curconstr->next;
+						curconstr->next = nullptr;
+						delete curconstr;
+						curconstr = pr.constr;
 						movetonext = 0;
 					}
 				}
@@ -1654,183 +1318,148 @@ int lav_simple_constraints(parsresultp pr) {
 	return 0;
 }
 
-int lav_reorder_cov(parsresultp resultp) {
-	bool oke;
+int lav_reorder_cov(parsresult& result) {
 	// lv.names
-	StringList sllv = lav_sl_init(true, &oke);
-	CHECK_OK(__LINE__);
-	flatp curflat = resultp->flat;
-	while (curflat != NULL) {
+	SmallStringList sllv;
+	flatp curflat = result.flat;
+	while (curflat != nullptr) {
 		if (strcmp(curflat->op, "=~") == 0 || strcmp(curflat->op, "<~") == 0) {
-			oke = lav_sl_add(&sllv, curflat->lhs);
-			CHECK_OK(__LINE__);
+			sllv.add((string)curflat->lhs);
 		}
 		curflat = curflat->next;
 	}
-	curflat = resultp->flat;
-	while (curflat != NULL) {
-		int dubbelpunt = lav_lookupc(':', curflat->rhs);
-		if (dubbelpunt) {
-			char* tmp = (char *)malloc(dubbelpunt);
-			if (tmp == NULL) {
-				return (SPE_MALLOC << 24) + __LINE__;
-			}
-			strncpy(tmp, curflat->rhs, dubbelpunt - 1);
-			if (lav_sl_contains(&sllv, tmp) || lav_sl_contains(&sllv, &curflat->rhs[dubbelpunt])) {
-				oke = lav_sl_add(&sllv, curflat->rhs);
-				CHECK_OK(__LINE__);
+	curflat = result.flat;
+	while (curflat != nullptr) {
+		string a(curflat->rhs);
+		size_t dubbelpunt = a.find_first_of(':');
+		if (dubbelpunt != string::npos) {
+			string tmp1 = a.substr(0, dubbelpunt);
+			string tmp2 = a.substr(dubbelpunt + 1);
+			if (sllv.contains(tmp1) || sllv.contains(tmp2)) {
+				sllv.add((string)curflat->rhs);
 			}
 		}
 		curflat = curflat->next;
 	}
 	// rv.names
-	StringList slrv = lav_sl_init(true, &oke);
-	CHECK_OK(__LINE__);
-	curflat = resultp->flat;
-	while (curflat != NULL) {
-		if (curflat->modifiers != NULL && curflat->modifiers->rv != NULL) {
-			for (int j = 0; j < curflat->modifiers->rv->length; j++) {
-				if (curflat->modifiers->rv->varvecarr[j].vartype == 2) {
-					oke = lav_sl_add(&slrv, curflat->modifiers->rv->varvecarr[j].vardata.textvalue);
-					CHECK_OK(__LINE__);
-				}
+	SmallStringList slrv;
+	curflat = result.flat;
+	while (curflat != nullptr) {
+		if (curflat->Get(mRv) != nullptr) {
+			modVar* mv = curflat->Get(mRv)->firstone;
+			while (mv != nullptr) {
+				if (mv->GetType() == Txt) slrv.add((string)mv->Tekst());
+				mv = mv->next;
 			}
 		}
 		curflat = curflat->next;
 	}
 	// lv.names2
-	StringList sllv2 = lav_sl_addlists(&sllv, &slrv, &oke);
-	CHECK_OK(__LINE__);
+	SmallStringList sllv2(sllv);
+	sllv2.add(slrv);
 	// compute eqs.y
-	StringList sleqsy = lav_sl_init(true, &oke);
-	CHECK_OK(__LINE__);
-	curflat = resultp->flat;
-	while (curflat != NULL) {
+	SmallStringList sleqsy;
+	curflat = result.flat;
+	while (curflat != nullptr) {
 		if (strcmp(curflat->op, "~") == 0) {
-			oke = lav_sl_add(&sleqsy, curflat->lhs);
-			CHECK_OK(__LINE__);
+			sleqsy.add((string)curflat->lhs);
 		}
 		curflat = curflat->next;
 	}
 	// compute eqs.x
-	StringList sleqsx = lav_sl_init(true, &oke);
-	CHECK_OK(__LINE__);
-	curflat = resultp->flat;
-	while (curflat != NULL) {
+	SmallStringList sleqsx;
+	curflat = result.flat;
+	while (curflat != nullptr) {
 		if (strcmp(curflat->op, "~") == 0 || strcmp(curflat->op, "<~") == 0) {
-			oke = lav_sl_add(&sleqsx, curflat->rhs);
-			CHECK_OK(__LINE__);
+			sleqsx.add((string)curflat->rhs);
 		}
 		curflat = curflat->next;
 	}
 	// compute vind
-	StringList slvind = lav_sl_init(true, &oke);
-	curflat = resultp->flat;
-	while (curflat != NULL) {
+	SmallStringList slvind;
+	curflat = result.flat;
+	while (curflat != nullptr) {
 		if (strcmp(curflat->op, "=~") == 0) {
-			oke = lav_sl_add(&slvind, curflat->rhs);
-			CHECK_OK(__LINE__);
+			slvind.add((string)curflat->rhs);
 		}
 		curflat = curflat->next;
 	}
 	// compute ovind
-	StringList slovind = lav_sl_subtractlists(&slvind, &sllv2, &oke);
-	CHECK_OK(__LINE__);
+	SmallStringList slovind(slvind);
+	slovind.remove(sllv2);
 	// compute ovy
-	StringList sltmp = lav_sl_subtractlists(&sleqsy, &sllv2, &oke);
-	CHECK_OK(__LINE__);
-	StringList slovy = lav_sl_subtractlists(&sltmp, &slovind, &oke);
-	CHECK_OK(__LINE__);
-	lav_sl_free(&sltmp);
+	SmallStringList sltmp(sleqsy);
+	sltmp.remove(sllv2);
+	SmallStringList slovy(sltmp);
+	slovy.remove(slovind);
 	// compute ovx
-	sltmp = lav_sl_subtractlists(&sleqsx, &sllv2, &oke);
-	CHECK_OK(__LINE__);
-	StringList sltmp2 = lav_sl_subtractlists(&sltmp, &slovind, &oke);
-	CHECK_OK(__LINE__);
-	lav_sl_free(&sltmp);
-	StringList slovx = lav_sl_subtractlists(&sltmp2, &slovy, &oke);
-	lav_sl_free(&sltmp2);
-	CHECK_OK(__LINE__);
+	SmallStringList sltmp3(sleqsx);
+	sltmp3.remove(sllv2);
+	SmallStringList sltmp2(sltmp3);
+	sltmp2.remove(slovind);
+	SmallStringList slovx(sltmp2);
+	slovx.remove(slovy);
 	// compute ovx1inovy
-	unsigned short tmplen;
-	char** ovxvalue = lav_sl_to_array(&slovx, &tmplen, &oke);
-	CHECK_OK(__LINE__);
-	StringList badones = lav_sl_init(true, &oke);
-	for (int j = 0; j < tmplen; j++) {
-		int dubbelpunt = lav_lookupc(':', ovxvalue[j]);
-		if (dubbelpunt) {
-			char* tmp = (char *)malloc(dubbelpunt);
-			if (tmp == NULL) {
-				return (SPE_MALLOC << 24) + __LINE__;
+	SmallStringList badones(slovx,
+		[](string a, const SmallStringList& sl) {
+			size_t dubbelpunt = a.find_first_of(':');
+			if (dubbelpunt != string::npos) {
+				string tmp1 = a.substr(0, dubbelpunt);
+				string tmp2 = a.substr(dubbelpunt + 1);
+				if (sl.contains(tmp1) || sl.contains(tmp2)) return true;
 			}
-			strncpy(tmp, ovxvalue[j], dubbelpunt - 1);
-			if (lav_sl_contains(&sleqsy, tmp) || lav_sl_contains(&sleqsy, &ovxvalue[j][dubbelpunt])) {
-				oke = lav_sl_add(&badones, ovxvalue[j]);
-				CHECK_OK(__LINE__);
-			}
-		}
-	}
-	for (int j = 0; j < tmplen; j++) free(ovxvalue[j]);
-	char** badvalues = lav_sl_value(&badones, &tmplen, &oke);
-	CHECK_OK(__LINE__);
-	for (int j = 0; j < tmplen; j++) {
-		oke = lav_sl_add(&slovy, badvalues[j]);
-		CHECK_OK(__LINE__);
-		oke = lav_sl_remove_value(&slovx, badvalues[j]);
-		CHECK_OK(__LINE__);
+			return false;
+		},
+		sleqsy);
+	for (int j = 0; j < badones.count(); j++) {
+		slovy.add(badones[j]);
+		slovx.remove(badones[j]);
 	}
 	// compute ovcov
-	StringList slovcov = lav_sl_init(true, &oke);
-	curflat = resultp->flat;
-	while (curflat != NULL) {
+	SmallStringList slovcov;
+	curflat = result.flat;
+	while (curflat != nullptr) {
 		if (strcmp(curflat->op, "~~") == 0) {
-			if (!lav_sl_contains(&sllv2, curflat->lhs)) {
-				oke = lav_sl_add(&slovcov, curflat->lhs);
-				CHECK_OK(__LINE__);
+			if (!sllv2.contains(curflat->lhs)) {
+				slovcov.add((string)curflat->lhs);
 			}
-			if (!lav_sl_contains(&sllv2, curflat->rhs)) {
-				oke = lav_sl_add(&slovcov, curflat->rhs);
-				CHECK_OK(__LINE__);
+			if (!sllv2.contains(curflat->rhs)) {
+				slovcov.add((string)curflat->rhs);
 			}
 		}
 		curflat = curflat->next;
 	}
 	// compute ovint
-	StringList slovint = lav_sl_init(true, &oke);
-	curflat = resultp->flat;
-	while (curflat != NULL) {
+	SmallStringList slovint;
+	curflat = result.flat;
+	while (curflat != nullptr) {
 		if (strcmp(curflat->op, "~1") == 0 || strcmp(curflat->op, "|") == 0) {
-			if (!lav_sl_contains(&sllv2, curflat->lhs)) {
-				oke = lav_sl_add(&slvind, curflat->lhs);
-				CHECK_OK(__LINE__);
+			if (!sllv2.contains(curflat->lhs)) {
+				slvind.add((string)curflat->lhs);
 			}
 		}
 		curflat = curflat->next;
 	}
-	// sltmp = ovind + ovy + ovx
-	sltmp2 = lav_sl_addlists(&slovind, &slovy, &oke);
-	CHECK_OK(__LINE__);
-	sltmp = lav_sl_addlists(&sltmp2, &slovx, &oke);
-	CHECK_OK(__LINE__);
-	lav_sl_free(&sltmp2);
+	// sltmp4 = ovind + ovy + ovx
+	SmallStringList sltmp4(slovind);
+	sltmp4.add(slovy);
+	sltmp4.add(slovx);
 	// extra = ov.cov + ovint
-	StringList slextra = lav_sl_addlists(&slovcov, &slovint, &oke);
-	CHECK_OK(__LINE__);
+	SmallStringList slextra(slovcov);
+	slextra.add(slovint);
 	// sl (ovnames) = ov.tmp + (ov.extra - ov.tmp) = ov.tmp + ov.extra because unique is set
-	StringList slov = lav_sl_addlists(&sltmp, &slextra, &oke);
-	lav_sl_free(&sltmp);
-	CHECK_OK(__LINE__);
+	SmallStringList slov(sltmp4);
+	slov.add(slextra);
 	// order of variables = lv.names, rv.names, ov.names
-	sltmp = lav_sl_addlists(&sllv, &slrv, &oke);
-	CHECK_OK(__LINE__);
-	sltmp2 = lav_sl_addlists(&sltmp, &slov, &oke);
-	CHECK_OK(__LINE__);
+	SmallStringList sltmp5(sllv);
+	sltmp5.add(slrv);
+	sltmp5.add(slov);
 	// swap if necessary
-	curflat = resultp->flat;
-	while (curflat != NULL) {
+	curflat = result.flat;
+	while (curflat != nullptr) {
 		if (strcmp(curflat->op, "~~") == 0 && strcmp(curflat->rhs, curflat->lhs) != 0) {
-			int poslhs = lav_sl_lookup(&sltmp2, curflat->lhs);
-			int posrhs = lav_sl_lookup(&sltmp2, curflat->rhs);
+			int poslhs = sltmp5.lookup(curflat->lhs);
+			int posrhs = sltmp5.lookup(curflat->rhs);
 			if (poslhs > posrhs) {
 				char* tmptmp = curflat->lhs;
 				curflat->lhs = curflat->rhs;
@@ -1839,22 +1468,6 @@ int lav_reorder_cov(parsresultp resultp) {
 		}
 		curflat = curflat->next;
 	}
-	// free sl's
-	lav_sl_free(&sllv);
-	lav_sl_free(&slrv);
-	lav_sl_free(&sllv2);
-	lav_sl_free(&sleqsy);
-	lav_sl_free(&sleqsx);
-	lav_sl_free(&slvind);
-	lav_sl_free(&slovind);
-	lav_sl_free(&slovy);
-	lav_sl_free(&slovx);
-	lav_sl_free(&slovcov);
-	lav_sl_free(&slovint);
-	lav_sl_free(&slextra);
-	lav_sl_free(&sltmp);
-	lav_sl_free(&sltmp2);
-	lav_sl_free(&slov);
 	// return
 	return 0;
 }
@@ -1868,7 +1481,7 @@ int lav_reorder_cov(parsresultp resultp) {
 *  int, errorcode
 */
 
-static int lav_CreateOutput(parsresult* pr, MonoFormule* mfs, int nbmf, char* extramem)
+static int lav_CreateOutput(parsresult& pr, MonoFormule* mfs, int nbmf, char* extramem)
 {
 	strcpy(&extramem[0], "0");
 	strcpy(&extramem[2], "1");
@@ -1876,21 +1489,21 @@ static int lav_CreateOutput(parsresult* pr, MonoFormule* mfs, int nbmf, char* ex
 	strcpy(&extramem[6], ")");
 	strcpy(&extramem[8], "fixed");
 	strcpy(&extramem[14], "*");
-	const char* tmp1[] = { "group", "level", "block", "class", "\a" };
+	const string tmp1[] = { "group", "level", "block", "class", "\a" };
 	int error = 0;
 	int block = 1;
-	int block_op = 0;
+	string block1lhs;
+	int blockpos = 0;
+	bool block_op = false;
 	char* lhs;
 	char* op;
 	char* rhs;
-	char* modifchar;
-	flatp curflat = NULL;
+	flatp curflat = nullptr;
 	for (int mfi = 0; mfi < nbmf; mfi++) {
 		MonoFormule formul1 = mfs[mfi];
-		lav_CheckMfTokens(&formul1);
 		mftokenp lavoperator = formul1.lavoperator;
 		operators optype = lav_parse_operator(lavoperator->tekst);
-		char* help;
+		string help;
 		switch (optype) {
 		case OP_EQ:
 		case OP_LT:
@@ -1900,34 +1513,39 @@ static int lav_CreateOutput(parsresult* pr, MonoFormule* mfs, int nbmf, char* ex
 			lhs = lav_get_expression(formul1.first, lavoperator->prior, &error);
 			rhs = lav_get_expression(lavoperator->next, formul1.last, &error);
 			if (error) return error;
-			pr->constr = lav_constr_add(pr->constr, lhs, lavoperator->tekst, rhs);
+			pr.constr_add(lhs, lavoperator->tekst, rhs, 1, lavoperator->pos);
 			break;
 		case OP_BLOCK:
 			/* block start */
 			help = lav_tolower(formul1.first->tekst);
-
 			if (formul1.first == lavoperator || formul1.first->next != lavoperator ||
-				lav_lookup(help, tmp1) == 0 ||
+				lav_lookup(help.c_str(), tmp1) == 0 ||
 				formul1.last != lavoperator->next ||
 				(lavoperator->next->typ != T_IDENTIFIER &&
 					lavoperator->next->typ != T_STRINGLITERAL &&
 					lavoperator->next->typ != T_NUMLITERAL)) {
-				return (SPE_INVALIDBLOCK << 24) + formul1.first->pos;
+				return (spe_invalidblock << 24) + formul1.first->pos;
 			}
-			if (!block_op && pr->flat != NULL) {
-				lav_warn_add(SPW_FIRSTBLK, formul1.first->pos);
+			blockpos = formul1.first->next->pos;
+			if (!block_op && pr.flat != nullptr) {
+				 new warnelem(spw_firstblk, formul1.first->pos);
 			}
 			if (block_op) block++;
-			block_op = 1;
-			if (pr->flat == NULL) pr->flat = lav_flat_add(NULL, formul1.first->tekst, lavoperator->tekst, lavoperator->next->tekst, block, &error);
-			else curflat = lav_flat_add(pr->flat, formul1.first->tekst, lavoperator->tekst, lavoperator->next->tekst, block, &error);
-			if (error) return error;
+			else block1lhs.assign(help);
+			if (block == 2 && block1lhs == string("level") && help == string("group")) {
+				return (spe_lvlgrp << 24) + formul1.first->pos;
+			}
+			block_op = true;
+			pr.flat_add(formul1.first->tekst, lavoperator->tekst, lavoperator->next->tekst, block);
 			break;
 		default:
 			/* ------------------ relational operators -------------------------------- */
 			error = lav_parse_check_valid_name(lavoperator->prior); /* check valid name lhs */
+			if (strcmp(lavoperator->tekst, "~") == 0 &&
+				strcmp(lavoperator->prior->tekst, formul1.last->tekst) == 0)
+				error = (spe_autoregress << 24) + lavoperator->pos;
 			if (error) return(error);
-			for (mftokenp curtok = lavoperator->next; curtok != NULL; curtok = curtok->next) {
+			for (mftokenp curtok = lavoperator->next; curtok != nullptr; curtok = curtok->next) {
 				if (curtok->typ == T_IDENTIFIER && strcmp(curtok->tekst, "NA") != 0) {
 					error = lav_parse_check_valid_name(curtok);
 					if (error) return(error);
@@ -1935,45 +1553,39 @@ static int lav_CreateOutput(parsresult* pr, MonoFormule* mfs, int nbmf, char* ex
 			}
 			if (formul1.last->typ != T_IDENTIFIER && (
 				formul1.last->typ != T_NUMLITERAL || (optype != OP_MEASURE && optype != OP_REGRESSED_ON))) {
-				return (SPE_INVALIDLAST << 24) + formul1.last->pos;
+				return (spe_invalidlast << 24) + formul1.last->pos;
 			}
 			/* intercept fixed on 0
 			   replace 'lhs ~ 0' => 'lhs ~ 0 * 1' - intercept fixed on zero */
 			if (strcmp(lavoperator->next->tekst, "0") == 0 && optype == OP_REGRESSED_ON && lavoperator->next == formul1.last) {
-				error = lav_mftoken_insert(&formul1, NULL, lavoperator->next->pos, &extramem[14], T_SYMBOL);            // "*"
+				formul1.insert(nullptr, lavoperator->next->pos, &extramem[14], T_SYMBOL);            // "*"
 				if (error) return error;
-				error = lav_mftoken_insert(&formul1, NULL, lavoperator->next->pos, &extramem[2], T_NUMLITERAL);         // "1"
+				formul1.insert(nullptr, lavoperator->next->pos, &extramem[2], T_NUMLITERAL);         // "1"
 				if (error) return error;
 			}
 			/*	phantom latent variable
 				replace 'lhs =~ 0' => 'lhs =~ fixed(0)*lhs', 0 can be other numliteral
 					 also, lhs is last element before '=~' */
 			if (formul1.last == lavoperator->next && formul1.last->typ == T_NUMLITERAL && optype == OP_MEASURE) {
-				error = lav_mftoken_insert(&formul1, formul1.last, lavoperator->next->pos, &extramem[8], T_IDENTIFIER); // "0"
-				if (error) return error;
-				error = lav_mftoken_insert(&formul1, formul1.last, lavoperator->next->pos, &extramem[4], T_SYMBOL);     // "("
-				if (error) return error;
-				error = lav_mftoken_insert(&formul1, NULL, lavoperator->next->pos, &extramem[6], T_SYMBOL);             // ")"
-				if (error) return error;
-				error = lav_mftoken_insert(&formul1, NULL, lavoperator->next->pos, &extramem[14], T_SYMBOL);            // "*"
-				if (error) return error;
-				error = lav_mftoken_insert(&formul1, NULL, lavoperator->next->pos, lavoperator->prior->tekst, lavoperator->prior->typ);
-				if (error) return error;
-			}
+				formul1.insert(formul1.last, lavoperator->next->pos, &extramem[8], T_IDENTIFIER); // "0"
+				formul1.insert(formul1.last, lavoperator->next->pos, &extramem[4], T_SYMBOL);     // "("
+				formul1.insert(nullptr, lavoperator->next->pos, &extramem[6], T_SYMBOL);             // ")"
+				formul1.insert(nullptr, lavoperator->next->pos, &extramem[14], T_SYMBOL);            // "*"
+				formul1.insert(nullptr, lavoperator->next->pos, lavoperator->prior->tekst, lavoperator->prior->typ);
+		}
 			/* modifiers */
 			/* 1. Add flat if necessary or find existing flat */
 			lhs = lavoperator->prior->tekst;
 			op = lavoperator->tekst;
 			rhs = formul1.last->tekst;
 			if (formul1.last->typ == T_NUMLITERAL && optype == OP_REGRESSED_ON) strcpy(rhs, "");
-			if (pr->flat == NULL) {
-				pr->flat = lav_flat_add(NULL, lhs, op, rhs, block, &error);
-				if (error) return error;
-				curflat = pr->flat;
+			if (pr.flat == nullptr) {
+				pr.flat_add(lhs, op, rhs, block);
+				curflat = pr.flat;
 			}
 			else {
 				int found = 0;
-				curflat = pr->flat;
+				curflat = pr.flat;
 				for (;;) {
 					if (strcmp(curflat->lhs, lhs) == 0 && strcmp(curflat->op, op) == 0 && curflat->block == block &&
 						(strcmp(curflat->rhs, rhs) == 0 ||
@@ -1981,175 +1593,102 @@ static int lav_CreateOutput(parsresult* pr, MonoFormule* mfs, int nbmf, char* ex
 						found = 1;
 						break;
 					}
-					if (curflat->next == NULL) break;
+					if (curflat->next == nullptr) break;
 					curflat = curflat->next;
 				}
 				if (!found) {
-					curflat = lav_flat_add(pr->flat, lhs, op, rhs, block, &error);
-					if (error) return error;
+					pr.flat_add(lhs, op, rhs, block);
+					curflat = pr.flat;
+					while (curflat->next != nullptr) curflat = curflat->next;
 				}
 			}
 			/* 2. lhs modifier */
-			modp curmod = NULL;
-			int modadded = 0;
-			if (curflat->modifiers == NULL) {
-				curmod = lav_mod_create();
-				if (curmod == NULL) {
-					return (SPE_MALLOC << 24) + __LINE__;
-				}
-			}
-			else curmod = curflat->modifiers;
+			Modifier* m;
 			if (formul1.first->next != lavoperator) {
-				modifchar = lav_parse_get_modifier_l(formul1, &error);
+				m = lav_parse_get_modifier_l(formul1, &error);
 				if (error != 0) {
-					if (curflat->modifiers == NULL) free(curmod);
 					return error;
 				}
-				if (curmod->efa != NULL) {
-					error =  lav_warn_add(SPW_MODMULTIPLE, formul1.first->pos);
-					if (error != 0) {
-						if (curflat->modifiers == NULL) free(curmod);
-						return error;
-					}
+				Modifier* mnu = curflat->Get(mEfa);
+				if (mnu != nullptr) {
+					 new warnelem(spw_modmultiple, formul1.first->pos);
 				}
-				curmod->efa = modifchar;
-				modadded = 1;
+				curflat->Add(m);
 			}
 			/* 3. rhs modifiers */
-			varvec* modif = (varvec *)malloc(sizeof(varvec));
-			mftokenp from = NULL;
-			enum modifiertype modtyp = (modifiertype) (-1);
-			mftokenp endtok = NULL;
+			mftokenp from = nullptr;
+			mftokenp endtok = nullptr;
 			do {
-				modif = lav_parse_get_modifier_r(formul1, from, &modtyp, &endtok, &error);
-				int warnpos = (from == NULL) ? formul1.lavoperator->next->pos : from->pos;
-				if (modif->length != 0) {
-					switch (modtyp) {
-					case M_FIXED:
-						if (curmod->fixed != NULL) error =  lav_warn_add(SPW_MODMULTIPLE, warnpos);
-						curmod->fixed = modif;
-						modadded = 1;
-						break;
-					case M_START:
-						if (curmod->start != NULL) error =  lav_warn_add(SPW_MODMULTIPLE, warnpos);
-						curmod->start = modif;
-						modadded = 1;
-						break;
-					case M_LOWER:
-						if (curmod->lower != NULL) error =  lav_warn_add(SPW_MODMULTIPLE, warnpos);
-						curmod->lower = modif;
-						modadded = 1;
-						break;
-					case M_UPPER:
-						if (curmod->upper != NULL) error =  lav_warn_add(SPW_MODMULTIPLE, warnpos);
-						curmod->upper = modif;
-						modadded = 1;
-						break;
-					case M_LABEL:
-						if (curmod->label != NULL) error =  lav_warn_add(SPW_MODMULTIPLE, warnpos);
-						curmod->label = modif;
-						modadded = 1;
-						break;
-					case M_PRIOR:
-						if (curmod->prior != NULL) error =  lav_warn_add(SPW_MODMULTIPLE, warnpos);
-						curmod->prior = modif;
-						modadded = 1;
-						break;
-					case M_RV:
-						if (curmod->rv != NULL) error =  lav_warn_add(SPW_MODMULTIPLE, warnpos);
-						curmod->rv = modif;
-						modadded = 1;
-						break;
-					default:
-						error = (int)(SPE_PROGERROR << 24) + __LINE__;
-						break;
-					}
+				m = lav_parse_get_modifier_r(formul1, from, &endtok, &error);
+				int warnpos = (from == nullptr) ? formul1.lavoperator->next->pos : from->pos;
+				if (m != nullptr) {
+					if (curflat->Get(m->type) != nullptr)  new warnelem(spw_modmultiple, warnpos);
 					if (error != 0) {
-						if (curflat->modifiers == NULL) free(curmod);
 						return error;
 					}
+					curflat->Add(m);
 					from = endtok->next;
 				}
-			} while (modif->length != 0);
-			/* store modifiers in flat (if not already) */
-			if (curflat->modifiers == NULL) {
-				if (modadded) curflat->modifiers = curmod;
-				else free(curmod);
-			}
+			} while (m != nullptr);
 		} // switch optype
-		lav_CheckMfTokens(&formul1);
 	} // loop mfi
 	/* change op for intercepts (for convenience only) */
-	for (curflat = pr->flat; curflat != NULL; curflat = curflat->next) {
-		if (curflat->op != NULL && strcmp(curflat->op, "~") == 0 && strcmp(curflat->rhs, "") == 0) {
-			free(curflat->op);
-			curflat->op = (char*)malloc(3);
-			if (curflat->op != NULL) strcpy(curflat->op, "~1");
-			else {
-				return (SPE_MALLOC << 24) + __LINE__;
-			}
+	for (curflat = pr.flat; curflat != nullptr; curflat = curflat->next) {
+		if (curflat->op != nullptr && strcmp(curflat->op, "~") == 0 && strcmp(curflat->rhs, "") == 0) {
+			delete curflat->op;
+			curflat->op = new char[3];
+			strcpy(curflat->op, "~1");
 		}
 	}
 	error = lav_simple_constraints(pr);
 	if (error) return error;
 	error = lav_reorder_cov(pr);
 	if (error) return error;
-	//TODO:  new in 0.6-4: check for 'group' within 'level'
-	/*
-	if (any(flat.op == ":")) {
-	  op.idx <- which(flat.op == ":")
-	  if (length(op.idx) < 2L) {
-		# only 1 block identifier? this is weird -> give warning
-		lav_msg_warn(gettext("syntax contains only a single block identifier!"))
-	  } else {
-		first.block <- flat.lhs[op.idx[1L]]
-		second.block <- flat.lhs[op.idx[2L]]
-		if (first.block == "level" && second.block == "group") {
-		  lav_msg_stop(gettext("groups can not be nested within levels!"))
-		}
-	  }
-	}*/
+	if (block_op && block == 1)  new warnelem(spw_1block, blockpos);
 	return 0;
 }
 
 /* ------------------ lavaan_parse -------------------------------------
 * main parsing function for lavaan models
 * parameters
-*              pr : parsresult*, pointer to parsresult structure to receive result of parser
-*           model : const char *, string with model to be parsed
-*        errorpos : int*, position of error in model or line where internal error occurred
-*  errorstartline : int*, start of line model where error detected
-* errorlinelength : int*, length of the line where error detected
-*          report : FILE*, handle of file where to produce a report (NULL for no report)
+*              pr : parsresult&, structure to receive result of parser (by reference)
+*           model : const string, string with model to be parsed
+*        errorpos : int&, position of error in model or line where internal error occurred
+*   reservedwords : const string*, array of reserved words (end with "\a")
+*     debugreport : bool, set to true to produce a report in pr.debuginfo
 * return
 * int, errorcode (see SyntaxParser.h) or 0 if succes
 */
-int lav_parse(parsresult* pr, const char* model, int* errorpos, const char** reservedwords, FILE* report)
+int lav_parse(parsresult& pr, const string model, int& errorpos, const string* reservedwords, bool debugreport)
 {
-	pr->constr = NULL;
-	pr->flat = NULL;
-	pr->wrn = NULL;
-	lav_warn_init();
+	pr.constr = nullptr;
+	pr.flat = nullptr;
+	pr.wrn = nullptr;
+	if (statwarnp != nullptr) {
+		delete statwarnp;
+		statwarnp = nullptr;
+	}
 	int error = 0;
-	*errorpos = 0;
+	errorpos = 0;
 	int nbf = 0;
 	int nbmf = 0;
 	int errornumber = 0;
 	int j = 0;
-	bool oke;
-	char* extramem = NULL; // extra memory for step 3 strings "0", "1", "(", ")", "fixed" and "*"
-	while (strcmp(reservedwords[j], "\a") != 0) j++;
-	ReservedWords = lav_sl_from_array(reservedwords, j, true, &oke);
-	TokenLL* formules = lav_Tokenize(model, &nbf, &error);
+	char* extramem = nullptr; // extra memory for step 3 strings "0", "1", "(", ")", "fixed" and "*"
+	while (reservedwords[j] != string("\a")) j++;
+	lav_parse_check_valid_name(nullptr, reservedwords, j);
+
+	TokenLL* formules = lav_Tokenize(model.c_str(), nbf, error);
 	if (error == 0) {
-#ifdef _DEBUG
-		if (report != NULL) {
-			fprintf(report, "\nTokenize:\n");
+		if (debugreport) {
+			pr.debuginfo += "\nTokenize:\n";
 			for (j = 0; j < nbf; j++) {
-				fprintf(report, "\tFormule %d:\n", j);
+				pr.debuginfo += "\tFormule ";
+				pr.debuginfo += to_string(j);
+				pr.debuginfo += ":\n";
 				tokenp curtok = formules[j].first;
 				const char* wat;
-				do {
+				while (curtok != nullptr) {
 					switch (curtok->typ)
 					{
 					case T_IDENTIFIER: wat = "identifier"; break;
@@ -2162,94 +1701,98 @@ int lav_parse(parsresult* pr, const char* model, int* errorpos, const char** res
 						wat = "unknown";
 						break;
 					}
-					fprintf(report, "\t\t%p\t%d\t%d\t%-15s\t%d\t%s\n", curtok, curtok->pos, curtok->len, wat, curtok->formula, curtok->tekst);
+					pr.debuginfo += "\t\t";
+					pr.debuginfo += to_string(curtok->pos);
+					pr.debuginfo += "\t";
+					pr.debuginfo += to_string(curtok->len);
+					pr.debuginfo += "\t";
+					pr.debuginfo += wat;
+					pr.debuginfo += "\t";
+					pr.debuginfo += to_string(curtok->formula);
+					pr.debuginfo += "\t";
+					pr.debuginfo += curtok->tekst;
+					pr.debuginfo += "\n";
 					curtok = curtok->next;
-				} while (curtok != NULL);
+				};
 			}
 		}
-#endif
-		MonoFormule* mf = lav_MonoFormulas(formules, nbf, &nbmf, &error);
+		MonoFormule* mf = lav_MonoFormulas(formules, nbf, nbmf, error);
 		if (error == 0) {
-#ifdef _DEBUG
-			if (report != NULL) {
-				fprintf(report, "\nMonoFormulas:\n");
+			if (debugreport) {
+				pr.debuginfo += "\nMonoFormulas:\n";
 				for (j = 0; j < nbmf; j++) {
-					fprintf(report, "\t%p\t%p\t%p\t", mf[j].first, mf[j].lavoperator, mf[j].last);
+					pr.debuginfo += "\t";
 					mftokenp curtok = mf[j].first;
 					do {
-						fprintf(report, "%s", curtok->tekst);
+						pr.debuginfo += curtok->tekst;
 						curtok = curtok->next;
-					} while (curtok != NULL);
-					fprintf(report, "\n");
+					} while (curtok != nullptr);
+					pr.debuginfo += "\n";
 				}
 			}
-#endif
-			extramem = (char*)malloc(32);
-			if (extramem == NULL) {
-				error = (int)(SPE_MALLOC << 24) + __LINE__;
-			}
-			else {
-				error = lav_CreateOutput(pr, mf, nbmf, extramem);
-				pr->wrn = statwarnp;
-				for (j = 0; j < nbmf; j++) lav_MonoFormule_free(&mf[j]);
-				free(mf);
-				free(extramem);
-			}
+			extramem = new char[32];
+			error = lav_CreateOutput(pr, mf, nbmf, extramem);
+			pr.wrn = statwarnp;
+    		 delete [] extramem;
 		}
-		for (j = 0; j < nbf; j++) lav_TokenLL_free(&formules[j]);
-		free(formules);
-	}
-	if (error == 0) {
-#ifdef _DEBUG
-		if (report != NULL) {
-			fprintf(report, "\nCreateOutput\n---- flat ----\n");
-			for (flatp f = pr->flat; f != NULL; f = f->next) {
-				fprintf(report, "\t%s\t%s\t%s\t%d\n", f->lhs, f->op, f->rhs, f->block);
-				if (f->modifiers != NULL) {
-					if (f->modifiers->efa != NULL) fprintf(report, "\tefa : %s\n", f->modifiers->efa);
-					if (f->modifiers->fixed != NULL) fprintf(report, "\tfixed : %s\n", lav_var_tostring(f->modifiers->fixed, &error));
-					if (f->modifiers->label != NULL) fprintf(report, "\tlabel : %s\n", lav_var_tostring(f->modifiers->label, &error));
-					if (f->modifiers->lower != NULL) fprintf(report, "\tlower : %s\n", lav_var_tostring(f->modifiers->lower, &error));
-					if (f->modifiers->prior != NULL) fprintf(report, "\tprior : %s\n", lav_var_tostring(f->modifiers->prior, &error));
-					if (f->modifiers->rv != NULL) fprintf(report, "\t   rv : %s\n", lav_var_tostring(f->modifiers->rv, &error));
-					if (f->modifiers->start != NULL) fprintf(report, "\tstart : %s\n", lav_var_tostring(f->modifiers->start, &error));
-					if (f->modifiers->upper != NULL) fprintf(report, "\tupper : %s\n", lav_var_tostring(f->modifiers->upper, &error));
+		if (error == 0) {
+			if (debugreport) {
+				pr.debuginfo += "\nCreateOutput\n---- flat ----\n";
+				for (flatp f = pr.flat; f != nullptr; f = f->next) {
+					pr.debuginfo += "\t";
+					pr.debuginfo += f->lhs;
+					pr.debuginfo += "\t";
+					pr.debuginfo += f->op;
+					pr.debuginfo += "\t";
+					pr.debuginfo += f->rhs;
+					pr.debuginfo += "\t";
+					pr.debuginfo += to_string(f->block);
+					pr.debuginfo += "\n";
+					Modifier* curmod = f->modifiers;
+					while (curmod != nullptr) {
+						pr.debuginfo += "\t";
+						pr.debuginfo += modTypeNames[curmod->type];
+						pr.debuginfo += "\t";
+						pr.debuginfo += curmod->to_string();
+						pr.debuginfo += "\n";
+						curmod = curmod->next;
+					}
+				}
+				pr.debuginfo += "---- constr ----\n";
+				for (constrp constr = pr.constr; constr != nullptr; constr = constr->next) {
+					pr.debuginfo += "\t";
+					pr.debuginfo += constr->lhs;
+					pr.debuginfo += "\t";
+					pr.debuginfo += constr->op;
+					pr.debuginfo += "\t";
+					pr.debuginfo += constr->rhs;
+					pr.debuginfo += "\t";
+					pr.debuginfo += to_string(constr->user);
+					pr.debuginfo += "\n";
+				}
+				if (pr.wrn != nullptr) {
+					pr.debuginfo += "---- wrn ----\n";
+					for (warnp wp = pr.wrn; wp != nullptr; wp = wp->next) {
+						pr.debuginfo += "\t";
+						pr.debuginfo += to_string(wp->warncode);
+						pr.debuginfo += "\t";
+						pr.debuginfo += to_string(wp->warnpos);
+						pr.debuginfo += "\n";
+					}
 				}
 			}
-			fprintf(report, "---- constr ----\n");
-			for (constrp constr = pr->constr; constr != NULL; constr = constr->next) {
-				fprintf(report, "\t%s\t%s\t%s\t%d\n", constr->lhs, constr->op, constr->rhs, constr->user);
-			}
-			if (pr->wrn != NULL) {
-				fprintf(report, "---- wrn ----\n");
-				for (warnp wp = pr->wrn; wp != NULL; wp = wp->next) {
-					fprintf(report, "\t%d at %d\n", wp->warncode, wp->warnpos);
-				}
-			}
+			return 0;
 		}
-#endif
-		return 0;
 	}
 	errornumber = error >> 24;
-	*errorpos = error & 0xFFFFFF;
-#ifdef _DEBUG
-	if (report != NULL) fprintf(report, "Error code = %d (pos = %d)\n", errornumber, *errorpos);
-#endif
+	errorpos = error & 0xFFFFFF;
+	if (debugreport) {
+		pr.debuginfo += "Error code = ";
+		pr.debuginfo += to_string(errornumber);
+		pr.debuginfo += " (pos = ";
+		pr.debuginfo += to_string(errorpos);
+		pr.debuginfo += ")\n";
+	}
 	return errornumber;
 }
-
-/* ---------------freeparsresult--------------------------------------
-* function to free the memory allocated to store the freeparseresult
-* parameters
-* pr : struct parsresult*, pointer to object
-* return
-* void
-*/
-void lav_freeparsresult(parsresultp pr) {
-	if (pr != NULL) {
-		lav_constr_free(pr->constr);
-		lav_flat_free(pr->flat);
-		lav_warn_init();
-		pr->wrn = NULL;
-	}
 }

@@ -1,94 +1,157 @@
 #pragma once
-#include <stdio.h>
-#define _CRT_SECURE_NO_WARNINGS 1
-typedef struct var1 {
-	union vd {
-		double numvalue;
-		char* textvalue;
-	} vardata;
-	int varpos;          /* position of element in model source */
-	char vartype;        /* 1 = double, 2 = text, 3 = expression (in textvalue), 4 = NA */
-} var1;
-typedef struct varvec {
-	var1* varvecarr;
-	unsigned int length;
-	unsigned int capacity;
-} varvec;
+#include <cstdio>
+#include <string>
+namespace lavaan {
+enum modVarType { Unknown, Dbl, Txt, Na, Expr };
+enum modType { mUnknown, mEfa, mFixed, mStart, mLower, mUpper, mLabel, mPrior, mRv };
+class modVar {
+protected:
+	modVarType _type;
+public:
+	modVar* next;
+	int varpos;
+	modVar();
+	modVar(modVarType t, int pos = 0);
+	modVarType GetType() const;
+	virtual const double Value() = 0;
+	virtual const char* Tekst() = 0;
+	virtual ~modVar();
+};
+class modDbl : public modVar {
+private:
+	double _value;
+public:
+	modDbl(double value);
+	const double Value();
+	const char* Tekst();
+};
+class modNa : public modVar {
+public:
+	modNa();
+	const double Value();
+	const char* Tekst();
+};
+class modTxt : public modVar {
+private:
+	char* _value;
+public:
+	modTxt(const char* value);
+	const double Value();
+	const char* Tekst();
+	~modTxt();
+};
+class modExpr : public modVar {
+private:
+	char* _value;
+public:
+	modExpr(const char* value);
+	const double Value();
+	const char* Tekst();
+	~modExpr();
+};
 
-typedef struct modelem {
-	varvec* fixed;
-	varvec* start;
-	varvec* lower;
-	varvec* upper;
-	varvec* label;
-	varvec* prior;
-	char* efa;
-	varvec* rv;
-} modelem;
-typedef modelem* modp;
+class Modifier // element of a linked list of Modifiers, pointing at a linked list of modVar's
+{
+private:
+	modVar* lastone = nullptr;
+	bool owner = false;
+public:
+	modType type = mUnknown;
+	modVar* firstone = nullptr;
+	Modifier* next = nullptr;
+	Modifier();	// default constructor
+	Modifier(modType t);
+	void add(double x, int pos = 0);
+	void add(const char* x, int pos = 0);
+	void addNa(int pos = 0);
+	void addExpr(const char* x, int pos = 0);
+	std::string to_string() const;
+	void SetOwner(bool newstatus);
+	~Modifier();
+};
 
-typedef struct flatelem {
-	struct flatelem* next;
+class flatelem {
+public:
+	flatelem* next = nullptr;
 	char* lhs;
 	char* op;
 	char* rhs;
-	struct modelem* modifiers;
+	Modifier* modifiers = nullptr;
 	int block;
-} flatelem;
+	flatelem(const char* lhs, const char* op, const char* rhs, const int block);
+	void Add(Modifier* m);
+	Modifier* Get(modType mtype) const;
+	~flatelem();
+};
 typedef flatelem* flatp;
 
-typedef struct constrelem {
-	struct constrelem* next;
+class constrelem {
+public:
+	constrelem* next = nullptr;
 	char* lhs;
 	char* op;
 	char* rhs;
 	int user;
-} constrelem;
+	int pos;
+	constrelem(const char* lhs, const char* op, const char* rhs, const int user, const int pos);
+	~constrelem();
+};
 typedef constrelem* constrp;
 
-typedef struct warnelem {
-	struct warnelem* next;
+class warnelem {
+public:
+	warnelem();
+	warnelem(int, int);
+	warnelem* next;
 	int warncode;
 	int warnpos;
-} warnelem;
+	~warnelem();
+};
 typedef warnelem* warnp;
 
-typedef struct parsresult {
-	flatp flat;
-	constrp constr;
-	warnp wrn;
-} parsresult;
+class parsresult {
+public:
+	flatp flat = nullptr;
+	constrp constr = nullptr;
+	warnp wrn = nullptr;
+	std::string debuginfo;
+	void flat_add(const char* lhs, const char* op, const char* rhs, int block);
+	void constr_add(const char* lhs, const char* op, const char* rhs, const int user, const int pos);
+	~parsresult();
+};
 typedef parsresult* parsresultp;
 
 /* Syntax Parser Error codes */
-#define SPE_MALLOC (int)1           /* cannot allocate memory */
-#define SPE_PROGERROR (int)2        /* program error detected */
-#define SPE_ILLNUMLIT  (int)21      /* illegal numeric literal(e.g. 23.0ea34) */
-#define SPE_EMPTYMODEL (int)22      /* model is empty */
-#define SPE_FORMUL1 (int)23         /* model contains formule with only 1 token */
-#define SPE_ILLCHAR (int)24         /* model contains illegal character (not used in C program) */
-#define SPE_NOOPERATOR (int)31      /* formula without valid lavaan lavoperator */
-#define SPE_PARENTHESES (int)32     /* formula with left and right parentheses not matching */
-#define SPE_3WAYINTERACTION (int)33 /* Three - way or higher - order interaction terms */
-#define SPE_INVALIDNAME (int)41     /* invalid identifier name */
-#define SPE_INVALIDLHS (int)42      /* invalid lhs modifier */
-#define SPE_INVALIDVECTOR (int)43   /* invalid vector specification */
-#define SPE_MODNOLITORID (int)44    /* modifier token must be numeric literal, stringliteral or identifier */
-#define SPE_MODNONUM (int)45        /* modifier token must be numeric literal (or NA) */
-#define SPE_MODNOSTR (int)46        /* modifier token must be string literal */
-#define SPE_INVALIDBLOCK (int)47    /* invalid block specification */
-#define SPE_INVALIDLAST (int)48     /* last element of mono-formule invalid (should be identifier or numeric (for regression or measure)) */
-#define SPE_INVALIDMODSMB (int)49   /* invalid modifier symbol (should be '*' or '?') */
-#define SPE_INVALIDEXPR (int)50     /* invalid expression (only detectable in calling program) */
-#define SPE_INVALIDEXPRTYP (int)51  /* invalid type for expression (only detectable in calling program) */
+constexpr int spe_malloc = 1           /* cannot allocate memory */;
+constexpr int spe_progerror = 2        /* program error detected */;
+constexpr int spe_illnumlit = 21       /* illegal numeric literal(e.g. 23.0ea34) */;
+constexpr int spe_emptymodel= 22       /* model is empty */;
+constexpr int spe_formul1 = 23         /* model contains formule with only 1 token */;
+constexpr int spe_illchar = 24         /* model contains illegal character (not used in C program) */;
+constexpr int spe_nooperator = 31      /* formula without valid lavaan lavoperator */;
+constexpr int spe_parentheses = 32     /* formula with left and right parentheses not matching */;
+constexpr int spe_3wayinteraction = 33 /* Three - way or higher - order interaction terms */;
+constexpr int spe_autoregress = 34     /* Three - way or higher - order interaction terms */;
+constexpr int spe_invalidname = 41     /* invalid identifier name */;
+constexpr int spe_invalidlhs = 42      /* invalid lhs modifier */;
+constexpr int spe_invalidvector = 43   /* invalid vector specification */;
+constexpr int spe_modnolitorid = 44    /* modifier token must be numeric literal, stringliteral or identifier */;
+constexpr int spe_modnonum = 45        /* modifier token must be numeric literal (or NA) */;
+constexpr int spe_modnostr = 46        /* modifier token must be string literal */;
+constexpr int spe_invalidblock = 47    /* invalid block specification */;
+constexpr int spe_invalidlast = 48     /* last element of mono-formule invalid (should be identifier or numeric (for regression or measure)) */;
+constexpr int spe_invalidmodsmb = 49   /* invalid modifier symbol (should be '*' or '?') */;
+constexpr int spe_invalidexpr = 50     /* invalid expression (only detectable in calling program) */;
+constexpr int spe_invalidexprtyp = 51  /* invalid type for expression (only detectable in calling program) */;
+constexpr int spe_lvlgrp = 52          /* groups cannot be nested within levels! */;
+/* Syntax Parser Warnings */;
 
-/* Syntax Parser Warnings */
+constexpr int spw_operatorblanks = 101   /* blanks in lavaan lavoperator is deprecated */;
+constexpr int spw_identifierblanks = 102 /* blanks in identifier is deprecated */;
+constexpr int spw_firstblk = 103         /* first block defined after other formula */;
+constexpr int spw_modmultiple = 104      /* modifier specified multiple times, overwritten */;
+constexpr int spw_1block = 105           /* syntax contains only a single block identifier */;
 
-#define SPW_OPERATORBLANKS (int)101     /* blanks in lavaan lavoperator is deprecated */
-#define SPW_IDENTIFIERBLANKS (int)102   /* blanks in identifier is deprecated */
-#define SPW_FIRSTBLK (int)103           /* first block defined after other formula */
-#define SPW_MODMULTIPLE (int)104        /* modifier specified multiple times, overwritten */
-
-
-int lav_parse(parsresult* pr, const char* model, int* errorpos, const char** reservedwords, FILE* report);
+int lav_parse(parsresult& pr, const std::string model, int& errorpos, const std::string* reservedwords, bool debugreport);
 void lav_freeparsresult(parsresultp pr);
+}
