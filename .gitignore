@@ -1,5 +1,7 @@
 .dll
+.gz
 .o
+.Rproj
 .Rproj.user
 .Rhistory
 .RData

@@ -217,7 +217,7 @@ modExpr::modExpr(const char* value) : modVar(Expr), _value(nullptr) {
 }
 const double modExpr::Value() { return 0.0; }
 const char* modExpr::Tekst() { return _value; }
-modExpr::~modExpr() { delete []_value;}
+modExpr::~modExpr() { delete[]_value;}
 
 /* ----------------------- Modifier ---------------------------------------------------------------------------------
 Modifier is element of linked list of Modifiers, pointing to a linked list of modVar
@@ -347,9 +347,9 @@ Modifier* flatelem::Get(modType mtype) const { // get modifier given its type
 	}
 }
 flatelem::~flatelem() {
-	if (lhs != nullptr) delete lhs;
-	if (op != nullptr) delete op;
-	if (rhs != nullptr) delete rhs;
+	if (lhs != nullptr) delete[]lhs;
+	if (op != nullptr) delete[]op;
+	if (rhs != nullptr) delete[]rhs;
 	Modifier* curm = modifiers;
 	while (curm != nullptr) {
 		Modifier* nextm = curm->next;
@@ -375,9 +375,9 @@ constrelem::constrelem(const char* Lhs, const char* Op, const char* Rhs, const i
 	pos = Pos;
 }
 constrelem::~constrelem() {
-	if (lhs != nullptr) delete lhs;
-	if (op != nullptr) delete op;
-	if (rhs != nullptr) delete rhs;
+	if (lhs != nullptr) delete []lhs;
+	if (op != nullptr) delete []op;
+	if (rhs != nullptr) delete []rhs;
 }
 
 /* -------------------------------- warnings --------------------------------------------------------------------
@@ -1635,7 +1635,7 @@ static int lav_CreateOutput(parsresult& pr, MonoFormule* mfs, int nbmf, char* ex
 	/* change op for intercepts (for convenience only) */
 	for (curflat = pr.flat; curflat != nullptr; curflat = curflat->next) {
 		if (curflat->op != nullptr && strcmp(curflat->op, "~") == 0 && strcmp(curflat->rhs, "") == 0) {
-			delete curflat->op;
+			delete[]curflat->op;
 			curflat->op = new char[3];
 			strcpy(curflat->op, "~1");
 		}
@@ -1733,7 +1733,7 @@ int lav_parse(parsresult& pr, const string model, int& errorpos, const string* r
 			extramem = new char[32];
 			error = lav_CreateOutput(pr, mf, nbmf, extramem);
 			pr.wrn = statwarnp;
-    		 delete [] extramem;
+    		delete [] extramem;
 		}
 		if (error == 0) {
 			if (debugreport) {
