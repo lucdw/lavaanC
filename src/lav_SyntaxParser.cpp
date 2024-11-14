@@ -1011,7 +1011,7 @@ static char* lav_get_expression(mftokenp starttok, mftokenp endtok, int* error) 
 		if (curmftok == endtok) break;
 		curmftok = curmftok->next;
 	}
-	retval = new char[sb.length()];
+	retval = new char[sb.length() + 1];
 	strcpy(retval, sb.c_str());
 	return retval;
 }

@@ -6,10 +6,10 @@ enum modVarType { Unknown, Dbl, Txt, Na, Expr };
 enum modType { mUnknown, mEfa, mFixed, mStart, mLower, mUpper, mLabel, mPrior, mRv };
 class modVar {
 protected:
-	modVarType _type;
+	modVarType _type = Unknown;
 public:
-	modVar* next;
-	int varpos;
+	modVar* next = nullptr;
+	int varpos = 0;
 	modVar();
 	modVar(modVarType t, int pos = 0);
 	modVarType GetType() const;
@@ -19,7 +19,7 @@ public:
 };
 class modDbl : public modVar {
 private:
-	double _value;
+	double _value = 0.0;
 public:
 	modDbl(double value);
 	const double Value();
@@ -33,7 +33,7 @@ public:
 };
 class modTxt : public modVar {
 private:
-	char* _value;
+	char* _value = nullptr;
 public:
 	modTxt(const char* value);
 	const double Value();
@@ -42,7 +42,7 @@ public:
 };
 class modExpr : public modVar {
 private:
-	char* _value;
+	char* _value = nullptr;
 public:
 	modExpr(const char* value);
 	const double Value();
@@ -73,11 +73,11 @@ public:
 class flatelem {
 public:
 	flatelem* next = nullptr;
-	char* lhs;
-	char* op;
-	char* rhs;
+	char* lhs = nullptr;
+	char* op = nullptr;
+	char* rhs = nullptr;
 	Modifier* modifiers = nullptr;
-	int block;
+	int block = 0;
 	flatelem(const char* lhs, const char* op, const char* rhs, const int block);
 	void Add(Modifier* m);
 	Modifier* Get(modType mtype) const;
@@ -88,11 +88,11 @@ typedef flatelem* flatp;
 class constrelem {
 public:
 	constrelem* next = nullptr;
-	char* lhs;
-	char* op;
-	char* rhs;
-	int user;
-	int pos;
+	char* lhs = nullptr;
+	char* op = nullptr;
+	char* rhs = nullptr;
+	int user = 0;
+	int pos = 0;
 	constrelem(const char* lhs, const char* op, const char* rhs, const int user, const int pos);
 	~constrelem();
 };
@@ -102,9 +102,9 @@ class warnelem {
 public:
 	warnelem();
 	warnelem(int, int);
-	warnelem* next;
-	int warncode;
-	int warnpos;
+	warnelem* next = nullptr;
+	int warncode = 0;
+	int warnpos = 0;
 	~warnelem();
 };
 typedef warnelem* warnp;
@@ -153,5 +153,4 @@ constexpr int spw_modmultiple = 104      /* modifier specified multiple times, o
 constexpr int spw_1block = 105           /* syntax contains only a single block identifier */;
 
 int lav_parse(parsresult& pr, const std::string model, int& errorpos, const std::string* reservedwords, bool debugreport);
-void lav_freeparsresult(parsresultp pr);
 }
