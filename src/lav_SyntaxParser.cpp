@@ -9,19 +9,19 @@
 #include "lav_SmallStringList.h"
 using namespace std;
 namespace lavaan {
-/* ---------------- lookup utility functions ------------------------------- */
+/* ---------------- utility functions ------------------------------- */
 int lav_lookup(const char* str1, const std::string* str2);
 int lav_lookupc(char c, const char* str);
 std::string lav_tolower(const std::string a);
 bool lav_validnumlit(const std::string a);
 
+/* enums and array with names of modifier types */
 enum tokentype {
 	T_IDENTIFIER, T_NUMLITERAL, T_STRINGLITERAL, T_SYMBOL, T_LAVAANOPERATOR, T_NEWLINE
 };
 enum operators {
 	OP_MEASURE, OP_FORM, OP_SCALE, OP_CORRELATE, OP_REGRESSED_ON, OP_EQ, OP_LT, OP_GT, OP_DEFINE, OP_BLOCK, OP_THRESHOLD, OP_GROUPWEIGHT
 };
-
 const char* modTypeNames[] = { "unknown", "efa", "fixed", "start", "lower", "upper", "label", "prior", "rv" };
 
 /* ==================== tokens (step 1 & 2) ================================================ */
@@ -446,18 +446,13 @@ void parsresult::constr_add(const char* lhs, const char* op, const char* rhs, co
 * function to split the model source in tokens
 * parameters
 * modelsrc: const char *, string with model source
-*      nbf: int *, pointer to int receiving number of formulas
-*    error: int *, pointer to int receiving error code
+*      nbf: int&, int receiving number of formulas
+*    error: int&, int receiving error code
 * return
 * tokenLL*, first item of arrays of linked lists with tokens, nullptr if error occurred
 * remarks
 * whitespace (consisting of '\t' and ' ' and '\r'), comments (after '#' or '!' on a line)
 * and newlines ('\n' or ';') are not in the list of tokens
-* possible errors:
-* spe_illnumlit : illegal numeric literal(e.g. 23.0ea34)
-* spe_formul1 : formule with only 1 token in it
-* spe_emptymodel : model contains no meaningfull tokens
-* spe_formul1 : model contains formula with only 1 token in it, implying an erroneous formula
 */
 static TokenLL* lav_Tokenize(const char* modelsrc, int& nbf, int& error) {
 	error = 0;
@@ -592,7 +587,6 @@ static TokenLL* lav_Tokenize(const char* modelsrc, int& nbf, int& error) {
 		}
 	}
 	// set tekst items in tokens
-
 	for (curtok = tokens.first; curtok != nullptr; curtok = curtok->next) {
 		curtok->SetTekst(modelsrc);
 	}
@@ -704,15 +698,12 @@ static TokenLL* lav_Tokenize(const char* modelsrc, int& nbf, int& error) {
 	return formules;
 }
 
-
 /* ----------------------- lav_InteractionTokens ----------------------
 * paste identifiers with only a ':' in between
 * parameters:
-* formul: TokenLL*, pointer to formula to handle
+* formul: TokenLL&, formula to handle
 * return
 * int, error code
-* possible error* spe_3wayinteraction : three-way or higher-order interaction terms
-*
 */
 static int lav_InteractionTokens(TokenLL& formul) {
 	int CheckInteraction = 1;
@@ -748,7 +739,7 @@ static int lav_InteractionTokens(TokenLL& formul) {
 	return error;
 }
 /* ---------------------lav_RemParentheses -------------------
-* remove unnecessary parentheses  (one element between parentheses, previous no identifier)
+* remove unnecessary parentheses  (one element between parentheses, previous not an identifier)
 * parameters:
 * formul: TokenLL*, pointer to formula to handle
 * return
@@ -772,15 +763,12 @@ static int lav_RemParentheses(TokenLL& formul) {
 * parameters
 * formules : tokenLL*, pointer to array of formules
 *      nbf : int, length formules array
-*     nbmf : int *, number of mono-formulas in the returned array
-*    error : int *, error code
+*     nbmf : int&, number of mono-formulas in the returned array
+*    error : int&, error code
 * return
 * MonoFormule*, array of mono-formula's
 *               the length of the returned array is stored in *nbmf
 *                  nullptr if error occurred
-* possible errors:
-*      spe_nooperator : formula without valid lavaan lavoperator
-*     spe_parentheses : formula with left and right parentheses not matching
 */
 static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int& nbmf, int& error) {
 	int aantalmf = 0;
@@ -791,9 +779,7 @@ static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int& nbmf, int&
 	int parentheses = 0;
 	int allowsplitting = 1;
 	tokenp curtok = nullptr;
-	/*
-	handling interaction variable types
-	 */
+	/* 	handling interaction variable types */
 	for (int j = 0; j < nbf; j++) {
 		if (formules[j].first == nullptr) {
 			error = (int)(spe_progerror << 24) + __LINE__;
@@ -802,19 +788,13 @@ static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int& nbmf, int&
 		error = lav_InteractionTokens(formules[j]);
 		if (error) return nullptr;
 	}
-	/*
-	remove unnecessary parentheses
-	*/
+	/* remove unnecessary parentheses */
 	for (int j = 0; j < nbf; j++) {
 		error = lav_RemParentheses(formules[j]);
 		if (error) return nullptr;
 	}
-
-	/*
-	exactly 1 lavaan lavoperator per formula (error if none found)
-	count number of monoformules
-	 */
-
+	/*	exactly 1 lavaan lavoperator per formula (error if none found)
+	count number of monoformules */
 	for (int j = 0; j < nbf; j++) {
 		if (formules[j].first == nullptr) {
 			error = (int)(spe_progerror << 24) + __LINE__;
@@ -857,9 +837,8 @@ static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int& nbmf, int&
 	}
 	nbmf = aantalmf;
 	/* move constraints and definitions to end of array
-	* (this is needed to move "simple constraints" to upper/lower modifiers
-	* in the third step of the parser!)
-	*/
+	(this is needed to move "simple constraints" to upper/lower modifiers
+	in the third step of the parser!)	*/
 	int jloop = 0;
 	int aantal = 0;
 	while (jloop < nbf - aantal) {
@@ -967,15 +946,14 @@ static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int& nbmf, int&
 	nbmf = mfnum;
 	return mfs;
 }
-
 /* ------------------------ lav_parse_check_valid_name ------------------------
 * checks if a string (identifier) is a valid r-name
 * parameters
 * tok: mftokenp, mftoken with text to check
+* reservedwords: string*, reservedwords that cannot be used as a valid name
+* nb: int, number of reservedwords
 * return
 * errorcode
-* possible errors:
-* spe_invalidname : invalid identifier name
 */
 static int lav_parse_check_valid_name(mftokenp tok = nullptr, const string* reservedwords = nullptr, const int nb = 0) {
 	static SmallStringList* ReservedWords;
@@ -1018,7 +996,7 @@ static char* lav_get_expression(mftokenp starttok, mftokenp endtok, int* error) 
 /* ------------ lav_parse_operator ----------------------
 * find lavaan lavoperator in list of tokens
 * parameters:
-* text : char *, tet to interpret as a token
+* text : char *, text to interpret as a token
 * return:
 * operators, type of lavoperator, -1 if not found
 */
@@ -1035,8 +1013,6 @@ static operators lav_parse_operator(char* text) {
 * error : int*, to store error code
 * return
 * char*, string with efa specification; nullptr if error occurred
-* possible errors:
-* spe_invalidlhs : invalid lhs modifier
 */
 static Modifier* lav_parse_get_modifier_l(MonoFormule mf, int* error) {
 	/*
@@ -1061,19 +1037,10 @@ static Modifier* lav_parse_get_modifier_l(MonoFormule mf, int* error) {
 * parameters
 *      mf : MonoFormule, mono-formula to analyse
 *    from : token to start from or nullptr, meaning start from token following lavoperator
-*      mt : modifiertype*, type of modifier detected
 * endtokp : mftokenp*, pointer to last token processed by this call
 *   error : int*, pointer to int receiving error code
 * return
-* varvec *, pointer to modifier value(s)
-* possible errors:
-* spe_invalidvector : invalid vector specification
-*  spe_modnolitorid : modifier token must be numeric literal, stringliteral or identifier
-*      spe_modnonum : modifier token must be numeric literal (or NA)
-*      spe_modnostr : modifier token must be string literal
-*  spe_invalidblock : invalid block specification
-*   spe_invalidlast : last element of mono-formule invalid (should be identifier or numeric (for regression or measure))
-*
+* Modifier *, pointer to modifier
 		# possibilities
 		# stringliteral|identifier * identifier|numliteral
 		# numliteral * identifier|numliteral
@@ -1267,7 +1234,7 @@ static Modifier* lav_parse_get_modifier_r(MonoFormule mf, mftokenp from, mftoken
 * parameters
 * pr : pointer to parsresult
 * return
-* void
+* int, 0
 */
 int lav_simple_constraints(parsresult& pr) {
 	if (pr.constr == nullptr) return 0;
@@ -1317,7 +1284,7 @@ int lav_simple_constraints(parsresult& pr) {
 	}
 	return 0;
 }
-
+/* reorder covariance vars in order of declaration, if necessary */
 int lav_reorder_cov(parsresult& result) {
 	// lv.names
 	SmallStringList sllv;
@@ -1474,9 +1441,10 @@ int lav_reorder_cov(parsresult& result) {
 
 /* ******************* step 3 : Create output ***************
 * parameters
-*    pr : parsresult*, pointer to structure to receive the result
-*   mfs : MonoFormule*, pointer to first element of array of monoformules
-*  nbmf : int,  number of MonoFormules in array
+*       pr : parsresult*, pointer to structure to receive the result
+*      mfs : MonoFormule*, pointer to first element of array of monoformules
+*     nbmf : int,  number of MonoFormules in array
+* extramem : extra memory to store some 'constants' on the heap for use (reference) in newly created mftokens
 * return
 *  int, errorcode
 */
@@ -1654,7 +1622,7 @@ static int lav_CreateOutput(parsresult& pr, MonoFormule* mfs, int nbmf, char* ex
 *              pr : parsresult&, structure to receive result of parser (by reference)
 *           model : const string, string with model to be parsed
 *        errorpos : int&, position of error in model or line where internal error occurred
-*   reservedwords : const string*, array of reserved words (end with "\a")
+*   reservedwords : const string*, array of reserved words (must end with "\a")
 *     debugreport : bool, set to true to produce a report in pr.debuginfo
 * return
 * int, errorcode (see SyntaxParser.h) or 0 if succes

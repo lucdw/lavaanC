@@ -35,8 +35,6 @@ public:
 		position[0] = 0;
 		leng[0] = -buffercap;
 		poslenlen = 1;
-//		std::cout << this << ":" << (void*)buffer <<
-//			" " << (void*)position << " " << (void*)leng << " allocated\n";
 	}
 	SmallStringList(const std::string* arr, int arrlen) : SmallStringList() {
 		for (int j = 0; j < arrlen; j++)  add(arr[j]);
@@ -52,8 +50,6 @@ public:
 		memcpy(buffer, x.buffer, buffercap);
 		memcpy(position, x.position, poslenlen * sizeof(int));
 		memcpy(leng, x.leng, poslenlen * sizeof(int));
-//		std::cout << this << ":" << (void*)buffer <<
-//			" " << (void*)position << " " << (void*)leng << " allocated\n";
 	}
 	SmallStringList(const SmallStringList& x, std::function<bool(std::string, const SmallStringList&)> func,
 		const SmallStringList& y) : SmallStringList() {
@@ -78,14 +74,10 @@ public:
 			memcpy(buffer, x.buffer, buffercap);
 			memcpy(position, x.position, poslenlen * sizeof(int));
 			memcpy(leng, x.leng, poslenlen * sizeof(int));
-//			std::cout << this << ":" << (void*)buffer <<
-//				" " << (void*)position << " " << (void*)leng << " reallocated\n";
 		}
 		return *this;
 	}
 	~SmallStringList() {
-//		std::cout << "deallocate " << this << ":" << (void*) buffer <<
-//			" " << (void*) position << " " << (void*) leng << "\n";
 		delete[]buffer;
 		delete[]position;
 		delete[]leng;
@@ -96,8 +88,6 @@ public:
 		return std::string(&buffer[position[j]]);
 	}
 	void add(const std::string a) {
-//		std::cout << "add " << a << "\tbuffercap:" << buffercap << "\tposlencap:" << poslencap <<
-//			"\nposlenlen:" << poslenlen << "\tvallength:" << vallength << "\n";
 		for (int i = 0; i < vallength; i++)	if ((*this)[i] == a) return; // already present
 		// extend position if necessary
 		if (poslenlen > poslencap - 2) {
@@ -106,8 +96,6 @@ public:
 			int* lengnew = new int[poslencap];
 			memcpy(positionnew, position, poslenlen * sizeof(int));
 			memcpy(lengnew, leng, poslenlen * sizeof(int));
-//			std::cout << (void*)position << " -> " << (void*)positionnew << "\n";
-//			std::cout << (void*)leng << " -> " << (void*)lengnew << "\n";
 			delete[] position;
 			delete[] leng;
 			position = positionnew;
@@ -119,7 +107,6 @@ public:
 			int buffercapnew = buffercap << 1;
 			char* buffernew = new char[buffercapnew];
 			memcpy(buffernew, buffer, buffercap);
-//			std::cout << (void*)buffer << " -> " << (void*)buffernew << "\n";
 			delete[] buffer;
 			buffer = buffernew;
 			if (leng[poslenlen - 1] < 0) {
