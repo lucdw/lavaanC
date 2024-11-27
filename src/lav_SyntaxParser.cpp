@@ -1509,10 +1509,6 @@ static int lav_CreateOutput(parsresult& pr, MonoFormule* mfs, int nbmf, char* ex
 		default:
 			/* ------------------ relational operators -------------------------------- */
 			error = lav_parse_check_valid_name(lavoperator->prior); /* check valid name lhs */
-			if (strcmp(lavoperator->tekst, "~") == 0 &&
-				strcmp(lavoperator->prior->tekst, formul1.last->tekst) == 0)
-				error = (spe_autoregress << 24) + lavoperator->pos;
-			if (error) return(error);
 			for (mftokenp curtok = lavoperator->next; curtok != nullptr; curtok = curtok->next) {
 				if (curtok->typ == T_IDENTIFIER && strcmp(curtok->tekst, "NA") != 0) {
 					error = lav_parse_check_valid_name(curtok);
@@ -1598,6 +1594,19 @@ static int lav_CreateOutput(parsresult& pr, MonoFormule* mfs, int nbmf, char* ex
 					from = endtok->next;
 				}
 			} while (m != nullptr);
+			/* check for autoregression not fixed at zero */
+			if (strcmp(lavoperator->tekst, "~") == 0 &&
+				strcmp(lavoperator->prior->tekst, formul1.last->tekst) == 0) {
+				if (curflat->Get(mFixed) == nullptr) {
+					error = (spe_autoregress << 24) + lavoperator->pos;
+				}
+				else {
+					Modifier* mtemp = curflat->Get(mFixed);
+					if (mtemp->firstone->next != nullptr || mtemp->firstone->Value() != 0.0)
+						error = (spe_autoregress << 24) + lavoperator->pos;
+				}
+			}
+			if (error) return(error);
 		} // switch optype
 	} // loop mfi
 	/* change op for intercepts (for convenience only) */
@@ -1629,128 +1638,133 @@ static int lav_CreateOutput(parsresult& pr, MonoFormule* mfs, int nbmf, char* ex
 */
 int lav_parse(parsresult& pr, const string model, int& errorpos, const string* reservedwords, bool debugreport)
 {
-	pr.constr = nullptr;
-	pr.flat = nullptr;
-	pr.wrn = nullptr;
-	if (statwarnp != nullptr) {
-		delete statwarnp;
-		statwarnp = nullptr;
-	}
 	int error = 0;
-	errorpos = 0;
-	int nbf = 0;
-	int nbmf = 0;
 	int errornumber = 0;
-	int j = 0;
-	char* extramem = nullptr; // extra memory for step 3 strings "0", "1", "(", ")", "fixed" and "*"
-	while (reservedwords[j] != string("\a")) j++;
-	lav_parse_check_valid_name(nullptr, reservedwords, j);
+	try {
+		pr.constr = nullptr;
+		pr.flat = nullptr;
+		pr.wrn = nullptr;
+		if (statwarnp != nullptr) {
+			delete statwarnp;
+			statwarnp = nullptr;
+		}
+		errorpos = 0;
+		int nbf = 0;
+		int nbmf = 0;
+		int j = 0;
+		char* extramem = nullptr; // extra memory for step 3 strings "0", "1", "(", ")", "fixed" and "*"
+		while (reservedwords[j] != string("\a")) j++;
+		lav_parse_check_valid_name(nullptr, reservedwords, j);
 
-	TokenLL* formules = lav_Tokenize(model.c_str(), nbf, error);
-	if (error == 0) {
-		if (debugreport) {
-			pr.debuginfo += "\nTokenize:\n";
-			for (j = 0; j < nbf; j++) {
-				pr.debuginfo += "\tFormule ";
-				pr.debuginfo += to_string(j);
-				pr.debuginfo += ":\n";
-				tokenp curtok = formules[j].first;
-				const char* wat;
-				while (curtok != nullptr) {
-					switch (curtok->typ)
-					{
-					case T_IDENTIFIER: wat = "identifier"; break;
-					case T_LAVAANOPERATOR: wat = "lavoperator"; break;
-					case T_NEWLINE: wat = "newline"; break;
-					case T_NUMLITERAL:wat = "numliteral"; break;
-					case T_STRINGLITERAL: wat = "stringliteral"; break;
-					case T_SYMBOL: wat = "symbol"; break;
-					default:
-						wat = "unknown";
-						break;
-					}
-					pr.debuginfo += "\t\t";
-					pr.debuginfo += to_string(curtok->pos);
-					pr.debuginfo += "\t";
-					pr.debuginfo += to_string(curtok->len);
-					pr.debuginfo += "\t";
-					pr.debuginfo += wat;
-					pr.debuginfo += "\t";
-					pr.debuginfo += to_string(curtok->formula);
-					pr.debuginfo += "\t";
-					pr.debuginfo += curtok->tekst;
-					pr.debuginfo += "\n";
-					curtok = curtok->next;
-				};
-			}
-		}
-		MonoFormule* mf = lav_MonoFormulas(formules, nbf, nbmf, error);
+		TokenLL* formules = lav_Tokenize(model.c_str(), nbf, error);
 		if (error == 0) {
 			if (debugreport) {
-				pr.debuginfo += "\nMonoFormulas:\n";
-				for (j = 0; j < nbmf; j++) {
-					pr.debuginfo += "\t";
-					mftokenp curtok = mf[j].first;
-					do {
+				pr.debuginfo += "\nTokenize:\n";
+				for (j = 0; j < nbf; j++) {
+					pr.debuginfo += "\tFormule ";
+					pr.debuginfo += to_string(j);
+					pr.debuginfo += ":\n";
+					tokenp curtok = formules[j].first;
+					const char* wat;
+					while (curtok != nullptr) {
+						switch (curtok->typ)
+						{
+						case T_IDENTIFIER: wat = "identifier"; break;
+						case T_LAVAANOPERATOR: wat = "lavoperator"; break;
+						case T_NEWLINE: wat = "newline"; break;
+						case T_NUMLITERAL:wat = "numliteral"; break;
+						case T_STRINGLITERAL: wat = "stringliteral"; break;
+						case T_SYMBOL: wat = "symbol"; break;
+						default:
+							wat = "unknown";
+							break;
+						}
+						pr.debuginfo += "\t\t";
+						pr.debuginfo += to_string(curtok->pos);
+						pr.debuginfo += "\t";
+						pr.debuginfo += to_string(curtok->len);
+						pr.debuginfo += "\t";
+						pr.debuginfo += wat;
+						pr.debuginfo += "\t";
+						pr.debuginfo += to_string(curtok->formula);
+						pr.debuginfo += "\t";
 						pr.debuginfo += curtok->tekst;
+						pr.debuginfo += "\n";
 						curtok = curtok->next;
-					} while (curtok != nullptr);
-					pr.debuginfo += "\n";
+					};
 				}
 			}
-			extramem = new char[32];
-			error = lav_CreateOutput(pr, mf, nbmf, extramem);
-			pr.wrn = statwarnp;
-    		delete [] extramem;
-		}
-		if (error == 0) {
-			if (debugreport) {
-				pr.debuginfo += "\nCreateOutput\n---- flat ----\n";
-				for (flatp f = pr.flat; f != nullptr; f = f->next) {
-					pr.debuginfo += "\t";
-					pr.debuginfo += f->lhs;
-					pr.debuginfo += "\t";
-					pr.debuginfo += f->op;
-					pr.debuginfo += "\t";
-					pr.debuginfo += f->rhs;
-					pr.debuginfo += "\t";
-					pr.debuginfo += to_string(f->block);
-					pr.debuginfo += "\n";
-					Modifier* curmod = f->modifiers;
-					while (curmod != nullptr) {
+			MonoFormule* mf = lav_MonoFormulas(formules, nbf, nbmf, error);
+			if (error == 0) {
+				if (debugreport) {
+					pr.debuginfo += "\nMonoFormulas:\n";
+					for (j = 0; j < nbmf; j++) {
 						pr.debuginfo += "\t";
-						pr.debuginfo += modTypeNames[curmod->type];
-						pr.debuginfo += "\t";
-						pr.debuginfo += curmod->to_string();
-						pr.debuginfo += "\n";
-						curmod = curmod->next;
-					}
-				}
-				pr.debuginfo += "---- constr ----\n";
-				for (constrp constr = pr.constr; constr != nullptr; constr = constr->next) {
-					pr.debuginfo += "\t";
-					pr.debuginfo += constr->lhs;
-					pr.debuginfo += "\t";
-					pr.debuginfo += constr->op;
-					pr.debuginfo += "\t";
-					pr.debuginfo += constr->rhs;
-					pr.debuginfo += "\t";
-					pr.debuginfo += to_string(constr->user);
-					pr.debuginfo += "\n";
-				}
-				if (pr.wrn != nullptr) {
-					pr.debuginfo += "---- wrn ----\n";
-					for (warnp wp = pr.wrn; wp != nullptr; wp = wp->next) {
-						pr.debuginfo += "\t";
-						pr.debuginfo += to_string(wp->warncode);
-						pr.debuginfo += "\t";
-						pr.debuginfo += to_string(wp->warnpos);
+						mftokenp curtok = mf[j].first;
+						do {
+							pr.debuginfo += curtok->tekst;
+							curtok = curtok->next;
+						} while (curtok != nullptr);
 						pr.debuginfo += "\n";
 					}
 				}
+				extramem = new char[32];
+				error = lav_CreateOutput(pr, mf, nbmf, extramem);
+				pr.wrn = statwarnp;
+				delete[] extramem;
 			}
-			return 0;
+			if (error == 0) {
+				if (debugreport) {
+					pr.debuginfo += "\nCreateOutput\n---- flat ----\n";
+					for (flatp f = pr.flat; f != nullptr; f = f->next) {
+						pr.debuginfo += "\t";
+						pr.debuginfo += f->lhs;
+						pr.debuginfo += "\t";
+						pr.debuginfo += f->op;
+						pr.debuginfo += "\t";
+						pr.debuginfo += f->rhs;
+						pr.debuginfo += "\t";
+						pr.debuginfo += to_string(f->block);
+						pr.debuginfo += "\n";
+						Modifier* curmod = f->modifiers;
+						while (curmod != nullptr) {
+							pr.debuginfo += "\t";
+							pr.debuginfo += modTypeNames[curmod->type];
+							pr.debuginfo += "\t";
+							pr.debuginfo += curmod->to_string();
+							pr.debuginfo += "\n";
+							curmod = curmod->next;
+						}
+					}
+					pr.debuginfo += "---- constr ----\n";
+					for (constrp constr = pr.constr; constr != nullptr; constr = constr->next) {
+						pr.debuginfo += "\t";
+						pr.debuginfo += constr->lhs;
+						pr.debuginfo += "\t";
+						pr.debuginfo += constr->op;
+						pr.debuginfo += "\t";
+						pr.debuginfo += constr->rhs;
+						pr.debuginfo += "\t";
+						pr.debuginfo += to_string(constr->user);
+						pr.debuginfo += "\n";
+					}
+					if (pr.wrn != nullptr) {
+						pr.debuginfo += "---- wrn ----\n";
+						for (warnp wp = pr.wrn; wp != nullptr; wp = wp->next) {
+							pr.debuginfo += "\t";
+							pr.debuginfo += to_string(wp->warncode);
+							pr.debuginfo += "\t";
+							pr.debuginfo += to_string(wp->warnpos);
+							pr.debuginfo += "\n";
+						}
+					}
+				}
+				return 0;
+			}
 		}
+	}
+	catch (bad_alloc const&) {
+		error = (spe_malloc << 24) + 1;
 	}
 	errornumber = error >> 24;
 	errorpos = error & 0xFFFFFF;
