@@ -1,5 +1,5 @@
-\name{lav_parse_model_string_c}
-\alias{lav_parse_model_string_c}
+\name{parse_model_string}
+\alias{parse_model_string}
 \title{Parser in C}
 \description{
 The lavaan syntax parser  in C.
@@ -7,7 +7,7 @@ Returns the flat version as a list, with attributes modifiers, constraints and w
  or a numeric vector of length 2 with the error code and the position of the error.
 }
 \usage{
-lav_parse_model_string_c(model.syntax = "", debug = FALSE)
+parse_model_string(model.syntax = "", debug = FALSE)
 }
 \arguments{
 \item{model.syntax}{A description of the user-specified model. Typically, the model
@@ -20,5 +20,5 @@ model <- '
  visual  =~ x1 + x2 + x3
  textual =~ x4 + x5 + x6
  speed   =~ x7 + x8 + x9 '
-parsedmodel <- lav_parse_model_string_c(model)
+parsedmodel <- parse_model_string(model)
 }

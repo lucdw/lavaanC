@@ -223,7 +223,7 @@ SEXP lav_errorhere(int errorcode, int errorposition, SEXP model) {
 
 /* main function */
 extern "C" {
-  SEXP lav_parse_interface(SEXP model, SEXP debug) {
+  SEXP parse_interface(SEXP model, SEXP debug) {
     /* reserved words *in R*, to be modified if used for another programming language */
     static const string ReservedWords[] =
     { "if", "else", "repeat", "while", "function", "for", "in", "next", "break",
