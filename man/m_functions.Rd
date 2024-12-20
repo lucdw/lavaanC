@@ -32,6 +32,8 @@
 \alias{m_commutation_pre}
 \alias{m_commutation_post}
 \alias{m_commutation_pre_post}
+\alias{m_kronecker_dup_pre_post}
+\alias{m_kronecker_dup_cor_pre_post}
 \title{Matrix functions in C}
 \description{
 Some lavaan matrix functions in C.
@@ -70,9 +72,12 @@ m_commutation(m, n);
 m_commutation_pre(A);
 m_commutation_post(A);
 m_commutation_pre_post(A);
+m_kronecker_dup_pre_post(A, B = NULL);
+m_kronecker_dup_cor_pre_post(A, B = NULL);
 }
 \arguments{
 \item{A}{Matrix.}
+\item{B}{Matrix.}
 \item{S}{Symmetric matrix}
 \item{n}{Given dimension}
 \item{m}{Given dimension}

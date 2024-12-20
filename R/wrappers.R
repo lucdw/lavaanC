@@ -118,3 +118,17 @@ m_commutation_post <- function(A) {
 m_commutation_pre_post <- function(A) {
   .Call(C_m_commutation_pre_post, A)
 }
+m_kronecker_dup_pre_post <- function(A, B = NULL) {
+  if (is.null(B)) {
+    .Call(C_m_kronecker_dup_pre_post, A, A)
+  } else {
+    .Call(C_m_kronecker_dup_pre_post, A, B)
+  }
+}
+m_kronecker_dup_cor_pre_post <- function(A, B = NULL) {
+  if (is.null(B)) {
+    .Call(C_m_kronecker_dup_cor_pre_post, A, A)
+  } else {
+    .Call(C_m_kronecker_dup_cor_pre_post, A, B)
+  }
+}

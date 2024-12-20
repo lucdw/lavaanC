@@ -31,16 +31,16 @@ inline int getint(SEXP N, bool checkpositive = TRUE) {
   Rf_error("Only numeric and logical types accepted as integer!");
 }
 
-static SEXP select(SEXP inarray, SEXP indices) { // for internal use in C++ only
-  int n = LENGTH(indices);
-  int* ind = INTEGER(indices);
-  double* inarr = REAL(inarray);
-  SEXP x = PROTECT(Rf_allocVector(REALSXP, n));
-  double* xx = REAL(x);
-  for (int j = 0; j < n; j++) xx[j] = inarr[ind[j]];
-  UNPROTECT(1);
-  return x;
-}
+// static SEXP select(SEXP inarray, SEXP indices) { // for internal use in C++ only
+//   int n = LENGTH(indices);
+//   int* ind = INTEGER(indices);
+//   double* inarr = REAL(inarray);
+//   SEXP x = PROTECT(Rf_allocVector(REALSXP, n));
+//   double* xx = REAL(x);
+//   for (int j = 0; j < n; j++) xx[j] = inarr[ind[j]];
+//   UNPROTECT(1);
+//   return x;
+// }
 int getsparse(SEXP sparse) {
   if (!Rf_isNull(sparse)) {
     if (Rf_isString(sparse)) {
@@ -1048,11 +1048,10 @@ extern "C" {
             int indvech1 = j1 * n - (j1 * (j1 + 3)) / 2 + i1 - 1;
             int indvec11 = j1 * n + i1;
             int indvec12 = i1 * n + j1;
-            double temp = AA[indvec11 + n2 * indvec21]
+            xx[indvech1 + nstar * indvech2] = AA[indvec11 + n2 * indvec21]
                   + AA[indvec12 + n2 * indvec21]
                   + AA[indvec11 + n2 * indvec22]
                   + AA[indvec12 + n2 * indvec22];
-            xx[indvech1 + nstar * indvech2] = temp;
           }
         }
       }
@@ -1242,5 +1241,120 @@ extern "C" {
     }
     UNPROTECT(1);
     return x;
+  }
+
+  SEXP m_kronecker_dup_pre_post(SEXP A, SEXP B) {
+  // compute t(D) %*% (A %x% B) %*% D (without explicitly computing D or A %x% B)
+  // A %x% B must be a square matrix with nrow(A) * nrow(B) = ncol(A) * ncol(B)
+  // a complete square
+  int m1;
+  int n1;
+  getdim(A, m1, n1);
+  int m2;
+  int n2;
+  getdim(B, m2, n2);
+  if (m1 * m2 != n1 * n2) Rf_error("kronecker(A, B) must be a square matrix!");
+  int n = 1;
+  if (m1 * m2 > 100) n = 10;
+  while (n * n < m1 * m2) n++;
+  int nstar = (n * (n + 1)) / 2;
+  SEXP x = PROTECT(Rf_allocMatrix(REALSXP, nstar, nstar));
+  double* xx = REAL(x);
+  double* AA = REAL(A);
+  double* BB = REAL(B);
+
+  // procedure is the same as in m_duplication_pre_post, but using the
+  // fact that (A %x% B)[i, j] = A[i / mB, j / nB] * B[i % mB, j % nB]
+  // with / the integer division operator, % the modulo operator, mB the
+  // number of rows of B and nB the number of columns of B
+  for (int j2 = 0; j2 < n; j2++) {
+    for (int i2 = j2; i2 < n; i2++) {
+      int indvech2 = j2 * n - (j2 * (j2 + 1)) / 2 + i2; // column in result
+      int indvec21 = j2 * n + i2;        // column in A %x% B
+      int indvec21_1 = indvec21 / n2;    // --> column in A
+      int indvec21_2 = indvec21 % n2;    // --> column in B
+      int indvec22 = i2 * n + j2;
+      int indvec22_1 = indvec22 / n2;
+      int indvec22_2 = indvec22 % n2;
+      for (int j1 = 0; j1 < n; j1++) {
+        for (int i1 = j1; i1 < n; i1 ++) {
+          int indvech1 = j1 * n - (j1 * (j1 + 1)) / 2 + i1; // row in result
+          int indvec11 = j1 * n + i1;    // row in A %x% B
+          int indvec11_1 = indvec11 / m2; // --> row in A
+          int indvec11_2 = indvec11 % m2; // --> row in B
+          int indvec12 = i1 * n + j1;
+          int indvec12_1 = indvec12 / m2;
+          int indvec12_2 = indvec12 % m2;
+          double temp = AA[indvec11_1 + m1 * indvec21_1] *
+                        BB[indvec11_2 + m2 * indvec21_2];
+          if (i1 != j1) temp += AA[indvec12_1 + m1 * indvec21_1] *
+                                BB[indvec12_2 + m2 * indvec21_2];
+          if (i2 != j2) temp += AA[indvec11_1 + m1 * indvec22_1] *
+                                BB[indvec11_2 + m2 * indvec22_2];
+          if ((i1 != j1) && (i2 != j2))
+                        temp += AA[indvec12_1 + m1 * indvec22_1] *
+                                BB[indvec12_2 + m2 * indvec22_2];
+          xx[indvech1 + nstar * indvech2] = temp;
+        }
+      }
+    }
+  }
+  UNPROTECT(1);
+  return x;
+  }
+
+  SEXP m_kronecker_dup_cor_pre_post(SEXP A, SEXP B) {
+  // compute t(D) %*% (A %x% B) %*% D (without explicitly computing D or A %x% B)
+  // A %x% B must be a square matrix with nrow(A) * nrow(B) = ncol(A) * ncol(B)
+  // a complete square - correlation version: ignoring dagonal elements
+  int m1;
+  int n1;
+  getdim(A, m1, n1);
+  int m2;
+  int n2;
+  getdim(B, m2, n2);
+  if (m1 * m2 != n1 * n2) Rf_error("kronecker(A, B) must be a square matrix!");
+  int n = 1;
+  if (m1 * m2 > 100) n = 10;
+  while (n * n < m1 * m2) n++;
+  int nstar = (n * (n - 1)) / 2;
+  SEXP x = PROTECT(Rf_allocMatrix(REALSXP, nstar, nstar));
+  double* xx = REAL(x);
+  double* AA = REAL(A);
+  double* BB = REAL(B);
+
+  // procedure is the same as in m_duplication_cor_pre_post, but using the
+  // fact that (A %x% B)[i, j] = A[i / mB, j / nB] * B[i % mB, j % nB]
+  // with / the integer division operator, % the modulo operator, mB the
+  // number of rows of B and nB the number of columns of B
+  for (int j2 = 0; j2 < n; j2++) {
+    for (int i2 = j2 + 1; i2 < n; i2++) {
+      int indvech2 = j2 * n - (j2 * (j2 + 3)) / 2 + i2 - 1;// column in result
+      int indvec21 = j2 * n + i2;        // column in A %x% B
+      int indvec21_1 = indvec21 / n2;    // --> column in A
+      int indvec21_2 = indvec21 % n2;    // --> column in B
+      int indvec22 = i2 * n + j2;
+      int indvec22_1 = indvec22 / n2;
+      int indvec22_2 = indvec22 % n2;
+      for (int j1 = 0; j1 < n; j1++) {
+        for (int i1 = j1 + 1; i1 < n; i1 ++) {
+          int indvech1 = j1 * n - (j1 * (j1 + 3)) / 2 + i1 - 1;// row in result
+          int indvec11 = j1 * n + i1;    // row in A %x% B
+          int indvec11_1 = indvec11 / m2; // --> row in A
+          int indvec11_2 = indvec11 % m2; // --> row in B
+          int indvec12 = i1 * n + j1;
+          int indvec12_1 = indvec12 / m2;
+          int indvec12_2 = indvec12 % m2;
+          xx[indvech1 + nstar * indvech2] =
+            AA[indvec11_1 + m1 * indvec21_1] * BB[indvec11_2 + m2 * indvec21_2]
+          + AA[indvec12_1 + m1 * indvec21_1] * BB[indvec12_2 + m2 * indvec21_2]
+          + AA[indvec11_1 + m1 * indvec22_1] * BB[indvec11_2 + m2 * indvec22_2]
+          + AA[indvec12_1 + m1 * indvec22_1] * BB[indvec12_2 + m2 * indvec22_2];
+        }
+      }
+    }
+  }
+  UNPROTECT(1);
+  return x;
   }
 }
