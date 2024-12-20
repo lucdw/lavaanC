@@ -46,8 +46,9 @@ static const R_CallMethodDef callmethods[] = {
   {"m_commutation_pre",            (DL_FUNC) &m_commutation_pre,            1},
   {"m_commutation_post",           (DL_FUNC) &m_commutation_post,           1},
   {"m_commutation_pre_post",       (DL_FUNC) &m_commutation_pre_post,       1},
-  {"m_kronecker_dup_pre_post",     (DL_FUNC) &m_kronecker_dup_pre_post,     2},
-  {"m_kronecker_dup_cor_pre_post", (DL_FUNC) &m_kronecker_dup_cor_pre_post, 2},
+  {"m_kronecker_dup_pre_post",     (DL_FUNC) &m_kronecker_dup_pre_post,     3},
+  {"m_kronecker_dup_cor_pre_post", (DL_FUNC) &m_kronecker_dup_cor_pre_post, 3},
+  {"m_kronecker_dup_ginv_pre_post",(DL_FUNC) &m_kronecker_dup_ginv_pre_post,3},
   {NULL, NULL, 0}
 };
 

@@ -118,17 +118,27 @@ m_commutation_post <- function(A) {
 m_commutation_pre_post <- function(A) {
   .Call(C_m_commutation_pre_post, A)
 }
-m_kronecker_dup_pre_post <- function(A, B = NULL) {
+m_kronecker_dup_pre_post <- function(A, B = NULL, multiplicator = 1.0) {
+  if (!is.double(multiplicator)) multiplicator <- as.double(multiplicator)
   if (is.null(B)) {
-    .Call(C_m_kronecker_dup_pre_post, A, A)
+    .Call(C_m_kronecker_dup_pre_post, A, A, multiplicator)
   } else {
-    .Call(C_m_kronecker_dup_pre_post, A, B)
+    .Call(C_m_kronecker_dup_pre_post, A, B, multiplicator)
   }
 }
-m_kronecker_dup_cor_pre_post <- function(A, B = NULL) {
+m_kronecker_dup_cor_pre_post <- function(A, B = NULL, multiplicator = 1.0) {
+  if (!is.double(multiplicator)) multiplicator <- as.double(multiplicator)
   if (is.null(B)) {
-    .Call(C_m_kronecker_dup_cor_pre_post, A, A)
+    .Call(C_m_kronecker_dup_cor_pre_post, A, A, multiplicator)
   } else {
-    .Call(C_m_kronecker_dup_cor_pre_post, A, B)
+    .Call(C_m_kronecker_dup_cor_pre_post, A, B, multiplicator)
+  }
+}
+m_kronecker_dup_ginv_pre_post<- function(A, B = NULL, multiplicator = 1.0) {
+  if (!is.double(multiplicator)) multiplicator <- as.double(multiplicator)
+  if (is.null(B)) {
+    .Call(C_m_kronecker_dup_ginv_pre_post, A, A, multiplicator)
+  } else {
+    .Call(C_m_kronecker_dup_ginv_pre_post, A, B, multiplicator)
   }
 }

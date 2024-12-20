@@ -34,6 +34,7 @@
 \alias{m_commutation_pre_post}
 \alias{m_kronecker_dup_pre_post}
 \alias{m_kronecker_dup_cor_pre_post}
+\alias{m_kronecker_dup_ginv_pre_post}
 \title{Matrix functions in C}
 \description{
 Some lavaan matrix functions in C.
@@ -72,8 +73,9 @@ m_commutation(m, n);
 m_commutation_pre(A);
 m_commutation_post(A);
 m_commutation_pre_post(A);
-m_kronecker_dup_pre_post(A, B = NULL);
-m_kronecker_dup_cor_pre_post(A, B = NULL);
+m_kronecker_dup_pre_post(A, B = NULL, multiplicator = 1.0);
+m_kronecker_dup_cor_pre_post(A, B = NULL, multiplicator = 1.0);
+m_kronecker_dup_ginv_pre_post(A, B = NULL, multiplicator = 1.0)
 }
 \arguments{
 \item{A}{Matrix.}
@@ -86,6 +88,7 @@ m_kronecker_dup_cor_pre_post(A, B = NULL);
 \item{idx}{vector of indices}
 \item{type}{'and' or 'or' to indicate join of conditions on rows and cols}
 \item{add_idx_at_start}{logical indicating if idxis to be added at start}
+\item{multiplicator}{scalar double to multiply the result with}
 }
 \examples{
 m1 <- matrix(1:12*1.01, ncol = 3)

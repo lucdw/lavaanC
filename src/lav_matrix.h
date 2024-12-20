@@ -37,5 +37,6 @@ SEXP m_commutation(SEXP m, SEXP n);
 SEXP m_commutation_pre(SEXP A);
 SEXP m_commutation_post(SEXP A);
 SEXP m_commutation_pre_post(SEXP A);
-SEXP m_kronecker_dup_pre_post(SEXP A, SEXP B);
-SEXP m_kronecker_dup_cor_pre_post(SEXP A, SEXP B);
+SEXP m_kronecker_dup_pre_post(SEXP A, SEXP B, SEXP multiplicator);
+SEXP m_kronecker_dup_cor_pre_post(SEXP A, SEXP B, SEXP multiplicator);
+SEXP m_kronecker_dup_ginv_pre_post(SEXP A, SEXP B, SEXP multiplicator);
