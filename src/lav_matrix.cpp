@@ -55,6 +55,10 @@ int getsparse(SEXP sparse) {
 
 extern "C" {
   SEXP m_prod(SEXP mat1, SEXP mat2, SEXP sparse) {
+    // m_prod performs matrix multiplication with the possibility to
+    // boost performance by indicating that one of the matrices is sparse.
+    // returns mat1 x mat2, sparse is 'L' to indicate mat1 is sparse,
+    // 'R' to indicate mat2 is sparse
     int spa = getsparse(sparse);
     int m1, n1, m2, n2;
     getdim(mat1, m1, n1);
@@ -104,6 +108,10 @@ extern "C" {
   }
 
   SEXP m_crossprod(SEXP mat1, SEXP mat2, SEXP sparse) {
+    // m_crossprod performs matrix multiplication with the possibility to
+    // boost performance by indicating that one of the matrices is sparse.
+    // returns transpose(mat1) x mat2, sparse is 'L' to indicate mat1 is sparse,
+    // 'R' to indicate mat2 is sparse
     int spa = getsparse(sparse);
     int m1, n1, m2, n2;
     getdim(mat1, m1, n1);
@@ -156,6 +164,10 @@ extern "C" {
   }
 
   SEXP m_tcrossprod(SEXP mat1, SEXP mat2, SEXP sparse) {
+    // m_tcrossprod performs matrix multiplication with the possibility to
+    // boost performance by indicating that one of the matrices is sparse.
+    // returns mat1 x transpose(mat2), sparse is 'L' to indicate mat1 is sparse,
+    // 'R' to indicate mat2 is sparse
     int spa = getsparse(sparse);
     int m1, n1, m2, n2;
     getdim(mat1, m1, n1);
@@ -204,10 +216,75 @@ extern "C" {
     UNPROTECT(1);
     return retval;
   }
+  SEXP m_prod_left_diag(SEXP A, SEXP D) {
+    // m_prod_left performs multiplication to the left with a diagonal matrix.
+    // A is the matrix to multiply, D a vector with the diagonal elements.
+    // returns diag(D) x A
+    int m, n;
+    getdim(A, m, n);
+    int lenD = LENGTH(D);
+    if (lenD != m) Rf_error("matrix and vector not conformable");
+    SEXP retval = PROTECT(Rf_allocMatrix(REALSXP, m, n));
+    double* x = REAL(retval);
+    double* AA = REAL(A);
+    double* DD = REAL(D);
+    for (int j = 0; j < n; j++)
+      for (int i = 0; i < m; i++)
+        x[i + m * j] = DD[i] * AA[i + m * j];
+    UNPROTECT(1);
+    return retval;
+  }
+  SEXP m_prod_right_diag(SEXP A, SEXP D) {
+    // m_prod_left performs multiplication to the right with a diagonal matrix.
+    // A is the matrix to multiply, D a vector with the diagonal elements.
+    // returns A x diag(D)
+    int m, n;
+    getdim(A, m, n);
+    int lenD = LENGTH(D);
+    if (lenD != n) Rf_error("matrix and vector not conformable");
+    SEXP retval = PROTECT(Rf_allocMatrix(REALSXP, m, n));
+    double* x = REAL(retval);
+    double* AA = REAL(A);
+    double* DD = REAL(D);
+    double werk;
+    for (int j = 0; j < n; j++) {
+      werk = DD[j];
+      for (int i = 0; i < m; i++)
+        x[i + m * j] = werk * AA[i + m * j];
+    }
+    UNPROTECT(1);
+    return retval;
+  }
+  SEXP m_sandwich_diag(SEXP A, SEXP B, SEXP D) {
+    // m_sandwich_diag performs multiplication with an intermediate diagonal
+    // matrix. A is the left matrix, B the right matrix and D a vector with
+    // the diagonal elements.
+    // returns A x diag(D) x B
+    int m1, n1, m2, n2;
+    getdim(A, m1, n1);
+    getdim(B, m2, n2);
+    int lenD = LENGTH(D);
+    if (n1 != m2 || n1 != lenD) Rf_error("matrices or vector not conforming");
+    SEXP retval = PROTECT(Rf_allocMatrix(REALSXP, m1, n2));
+    double* x = REAL(retval);
+    double* AA = REAL(A);
+    double* BB = REAL(B);
+    double* DD = REAL(D);
+    double werk;
+    for (int k = 0; k < m1 * n2; k++) x[k] = 0.0;
+    for (int j = 0; j < n2; j++) {
+      for (int k = 0; k < n1; k++) {
+        werk = DD[k] * BB[k + m2 * j];
+        for (int i = 0; i < m1; i++)
+          x[j * m1 + i] += werk * AA[i + m1 * k];
+      }
+    }
+    UNPROTECT(1);
+    return retval;
+  }
 
   SEXP m_vecr(SEXP A) {
     // vecr operator
-    //
     // the vecr operator transforms a matrix into
     // a vector by stacking the *rows* of the matrix one underneath the other
     int nrow;
@@ -237,7 +314,6 @@ extern "C" {
 
   SEXP m_vech(SEXP S, SEXP diagonal) {
     // vech
-    //
     // the vech operator (for 'half vectorization') transforms a *symmetric* matrix
     // into a vector by stacking the *columns* of the matrix one underneath the
     // other, but eliminating all supradiagonal elements
@@ -273,7 +349,6 @@ extern "C" {
           if (i > j || diag)  rvd[k++] = sd[i + n * j];
         }
       }
-
     }
     UNPROTECT(1);
     return retval;

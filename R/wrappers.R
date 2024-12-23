@@ -14,6 +14,15 @@ m_tcrossprod <- function(mat1, mat2, sparse = c("N", "L", "R")) {
   sparse <- match.arg(sparse)
   .Call(C_m_tcrossprod, mat1, mat2, sparse)
 }
+m_prod_left_diag <- function(A, D) {
+  .Call(C_m_prod_left_diag, A, D)
+}
+m_prod_right_diag <- function(A, D) {
+  .Call(C_m_prod_right_diag, A, D)
+}
+m_sandwich_diag <- function(A, B, D) {
+  .Call(C_m_sandwich_diag, A, B, D)
+}
 m_vecr <- function(A) {
   .Call(C_m_vecr, A)
 }

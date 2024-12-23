@@ -4,6 +4,9 @@
 SEXP m_prod(SEXP mat1, SEXP mat2, SEXP sparse);
 SEXP m_crossprod(SEXP mat1, SEXP mat2, SEXP sparse);
 SEXP m_tcrossprod(SEXP mat1, SEXP mat2, SEXP sparse);
+SEXP m_prod_left_diag(SEXP A, SEXP D);
+SEXP m_prod_right_diag(SEXP A, SEXP D);
+SEXP m_sandwich_diag(SEXP A, SEXP B, SEXP D);
 SEXP m_vecr(SEXP A);
 SEXP m_vech(SEXP S, SEXP diagonal);
 SEXP m_vechr(SEXP S, SEXP diagonal);
