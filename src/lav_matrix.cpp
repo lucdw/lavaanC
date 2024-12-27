@@ -41,16 +41,16 @@ inline int getint(SEXP N, bool checkpositive = TRUE) {
 //   UNPROTECT(1);
 //   return x;
 // }
-int getsparse(SEXP sparse) {
-  if (!Rf_isNull(sparse)) {
-    if (Rf_isString(sparse)) {
-      if (LENGTH(sparse) > 0) {
-        if (strcmp(CHAR(STRING_ELT(sparse, 0)), "L") == 0) return -1; // left
-        if (strcmp(CHAR(STRING_ELT(sparse, 0)), "R") == 0) return 1;  // right
+inline char getchar(SEXP charin, char dflt = ' ') {
+  if (!Rf_isNull(charin)) {
+    if (Rf_isString(charin)) {
+      if (LENGTH(charin) > 0) {
+        if (strlen(CHAR(STRING_ELT(charin, 0))) > 0)
+          return CHAR(STRING_ELT(charin, 0))[0];
       }
     }
   }
-  return 0; // none of the matrices indicated as sparse
+  return dflt;
 }
 
 extern "C" {
@@ -59,7 +59,7 @@ extern "C" {
     // boost performance by indicating that one of the matrices is sparse.
     // returns mat1 x mat2, sparse is 'L' to indicate mat1 is sparse,
     // 'R' to indicate mat2 is sparse
-    int spa = getsparse(sparse);
+   char spa = getchar(sparse);
     int m1, n1, m2, n2;
     getdim(mat1, m1, n1);
     getdim(mat2, m2, n2);
@@ -71,7 +71,7 @@ extern "C" {
     double werk = 0.0;
     for (int k = 0; k < m1 * n2; k++) ret[k] = 0.0;
     switch (spa) {
-    case -1:
+    case 'L':
       for (int k = 0; k < n1; k++) {
         for (int i = 0; i < m1; i++) {
           werk = left[i + m1 * k];
@@ -82,7 +82,7 @@ extern "C" {
         }
       }
       break;
-    case 0:
+    case ' ':
       for (int j = 0; j < n2; j++) {
         for (int k = 0; k < n1; k++) {
           werk = right[k + m2 * j];
@@ -91,7 +91,7 @@ extern "C" {
         }
       }
       break;
-    case 1:
+    case 'R':
       for (int j = 0; j < n2; j++) {
         for (int k = 0; k < n1; k++) {
           werk = right[k + m2 * j];
@@ -112,7 +112,7 @@ extern "C" {
     // boost performance by indicating that one of the matrices is sparse.
     // returns transpose(mat1) x mat2, sparse is 'L' to indicate mat1 is sparse,
     // 'R' to indicate mat2 is sparse
-    int spa = getsparse(sparse);
+   char spa = getchar(sparse);
     int m1, n1, m2, n2;
     getdim(mat1, m1, n1);
     getdim(mat2, m2, n2);
@@ -123,7 +123,7 @@ extern "C" {
     double* ret = REAL(retval);
     double werk = 0.0;
     switch (spa) {
-    case 0:
+    case ' ':
       for (int j = 0; j < n2; j++) {
         for (int i = 0; i < n1; i++) {
           werk = 0.0;
@@ -132,7 +132,7 @@ extern "C" {
         }
       }
       break;
-    case -1:
+    case 'L':
       for (int k = 0; k < n1 * n2; k++) ret[k] = 0.0;
       for (int i = 0; i < n1; i++) {
         for (int k = 0; k < m2; k++) {
@@ -145,7 +145,7 @@ extern "C" {
         }
       }
       break;
-    case 1:
+    case 'R':
       for (int k = 0; k < n1 * n2; k++) ret[k] = 0.0;
       for (int j = 0; j < n2; j++) {
         for (int k = 0; k < m2; k++) {
@@ -168,7 +168,7 @@ extern "C" {
     // boost performance by indicating that one of the matrices is sparse.
     // returns mat1 x transpose(mat2), sparse is 'L' to indicate mat1 is sparse,
     // 'R' to indicate mat2 is sparse
-    int spa = getsparse(sparse);
+   char spa = getchar(sparse);
     int m1, n1, m2, n2;
     getdim(mat1, m1, n1);
     getdim(mat2, m2, n2);
@@ -180,7 +180,7 @@ extern "C" {
     double werk = 0.0;
     for (int k = 0; k < m1 * m2; k++) ret[k] = 0.0;
     switch (spa) {
-    case 0:
+    case ' ':
       for (int k = 0; k < n1; k++) {
         for (int j = 0; j < m2; j++) {
           werk = right[k * m2 + j];
@@ -189,7 +189,7 @@ extern "C" {
         }
       }
       break;
-    case 1:
+    case 'R':
       for (int k = 0; k < n1; k++) {
         for (int j = 0; j < m2; j++) {
           werk = right[k * m2 + j];
@@ -200,7 +200,7 @@ extern "C" {
         }
       }
       break;
-    case -1:
+    case 'L':
       for (int k = 0; k < n1; k++) {
         for (int i = 0; i < m1; i++)
         {
@@ -587,20 +587,8 @@ extern "C" {
     int lengte = LENGTH(x);
     if (!Rf_isReal(x)) Rf_error("x must be real.");
     if (lengte == 0) Rf_error("length of x must be > 0");
-    int n = 0;
-    if (lengte > 110) {
-      int nmin = 1;
-      int nmax = lengte / 10; // avoid integer overflow !!!
-      n = (nmin + nmax) / 2;
-      while ((n * (n + 1) != 2 * lengte) && nmin != n) {
-        if (n * (n + 1) < 2 * lengte) nmin = n;
-        else nmax = n;
-        n = (nmin + nmax) / 2;
-      }
-    } else {
-      n = 1;
-      while (n * (n + 1) < 2 * lengte) n++;
-    }
+    int n = (int)(0.01 + (sqrt(1 + 8.0 * lengte) - 1)/ 2);
+    if (lengte * 2 != n * (n + 1)) Rf_error("length must equal n * (n + 1) / 2");
     if (!diag) n++;
     SEXP retval = PROTECT(Rf_allocMatrix(REALSXP, n, n));
     double* rvd = REAL(retval);
@@ -633,21 +621,8 @@ extern "C" {
     int lengte = LENGTH(x);
     if (!Rf_isReal(x)) Rf_error("x must be real.");
     if (lengte == 0) Rf_error("length of x must be > 0");
-
-    int n = 0;
-    if (lengte > 110) {
-      int nmin = 1;
-      int nmax = lengte / 10; // avoid integer overflow !!!
-      n = (nmin + nmax) / 2;
-      while ((n * (n + 1) != 2 * lengte) && nmin != n) {
-        if (n * (n + 1) < 2 * lengte) nmin = n;
-        else nmax = n;
-        n = (nmin + nmax) / 2;
-      }
-    } else {
-      n = 1;
-      while (n * (n + 1) < 2 * lengte) n++;
-    }
+    int n = (int)(0.01 + (sqrt(1 + 8.0 * lengte) - 1)/ 2);
+    if (lengte * 2 != n * (n + 1)) Rf_error("length must equal n * (n + 1) / 2");
     if (!diag) n++;
     SEXP retval = PROTECT(Rf_allocMatrix(REALSXP, n, n));
     double* rvd = REAL(retval);
@@ -688,8 +663,8 @@ extern "C" {
   }
 
   SEXP m_diagh_idx(SEXP n) {
-    // return the *vector* indices of the diagonal elements of the LOWER part
-    // of a symmatrix matrix of size 'n'
+    // return the *vech* indices of the diagonal elements of 
+    // a symmetric matrix of size 'n'
     int nn = getint(n);
     SEXP retval = PROTECT(Rf_allocVector(INTSXP, nn));
     int* rvd = INTEGER(retval);
@@ -750,8 +725,7 @@ extern "C" {
     }
     if (!Rf_isInteger(idx)) Rf_error("Parameter idx must be integer type.");
     int* idxi = INTEGER(idx);
-    if (!Rf_isString(type) || Rf_length(type) != 1)
-      Rf_error("model is not a single string");
+    if (!Rf_isString(type) || Rf_length(type) != 1) Rf_error("type is not a single string");
     std::string typestring(CHAR(STRING_ELT(type, 0)));
     bool andtype = (typestring == "and");
     bool addidx = getbool(add_idx_at_start);

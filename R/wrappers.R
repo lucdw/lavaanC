@@ -14,56 +14,64 @@ m_tcrossprod <- function(mat1, mat2, sparse = c("N", "L", "R")) {
   sparse <- match.arg(sparse)
   .Call(C_m_tcrossprod, mat1, mat2, sparse)
 }
-m_prod_left_diag <- function(A, D) {
-  .Call(C_m_prod_left_diag, A, D)
+m_prod_left_diag <- function(mat, dg) {
+  .Call(C_m_prod_left_diag, mat, dg)
 }
-m_prod_right_diag <- function(A, D) {
-  .Call(C_m_prod_right_diag, A, D)
+m_prod_right_diag <- function(mat, dg) {
+  .Call(C_m_prod_right_diag, mat, dg)
 }
-m_sandwich_diag <- function(A, B, D) {
-  .Call(C_m_sandwich_diag, A, B, D)
+m_sandwich_diag <- function(mat1, mat2, dg) {
+  .Call(C_m_sandwich_diag, mat1, mat2, dg)
 }
 m_vecr <- function(A) {
   .Call(C_m_vecr, A)
 }
 m_vech <- function(S, diagonal) {
+  if (missing(diagonal)) diagonal = TRUE;
   .Call(C_m_vech, S, diagonal)
 }
 m_vechr <- function(S, diagonal) {
+  if (missing(diagonal)) diagonal = TRUE;
   .Call(C_m_vechr, S, diagonal)
 }
 m_vechu <- function(S, diagonal) {
+  if (missing(diagonal)) diagonal = TRUE;
   .Call(C_m_vechu, S, diagonal)
 }
 m_vechru <- function(S, diagonal) {
+  if (missing(diagonal)) diagonal = TRUE;
   .Call(C_m_vechru, S, diagonal)
 }
 m_vech_idx <- function(n, diagonal) {
+  if (missing(diagonal)) diagonal = TRUE;
   .Call(C_m_vech_idx, n, diagonal)
 }
 m_vech_row_idx <- function(n, diagonal) {
-  .Call(C_m_vech_row_idx
-, n, diagonal)
+  if (missing(diagonal)) diagonal = TRUE;
+  .Call(C_m_vech_row_idx, n, diagonal)
 }
 m_vech_col_idx <- function(n, diagonal) {
-  .Call(C_m_vech_col_idx
-, n, diagonal)
+  if (missing(diagonal)) diagonal = TRUE;
+  .Call(C_m_vech_col_idx, n, diagonal)
 }
 m_vechr_idx <- function(n, diagonal) {
-  .Call(C_m_vechr_idx
-, n, diagonal)
+  if (missing(diagonal)) diagonal = TRUE;
+  .Call(C_m_vechr_idx, n, diagonal)
 }
 m_vechu_idx <- function(n, diagonal) {
-  .Call(C_m_vechu_idx
-, n, diagonal)
+  if (missing(diagonal)) diagonal = TRUE;
+  .Call(C_m_vechu_idx, n, diagonal)
 }
 m_vechru_idx <- function(n, diagonal) {
+  if (missing(diagonal)) diagonal = TRUE;
   .Call(C_m_vechru_idx, n, diagonal)
 }
 m_vech_reverse <- function(x, diagonal) {
+  if (missing(diagonal)) diagonal = TRUE;
   .Call(C_m_vech_reverse, x, diagonal)
 }
 m_vechr_reverse <- function(x, diagonal) {
+  if (missing(diagonal)) diagonal = TRUE;
   .Call(C_m_vechr_reverse, x, diagonal)
 }
 m_diag_idx <- function(n) {
@@ -75,10 +83,14 @@ m_diagh_idx <- function(n) {
 m_antidiag_idx <- function(n) {
   .Call(C_m_antidiag_idx, n)
 }
-m_vech_which_idx <- function(n, diagonal, idx, type, add_idx_at_start) {
+m_vech_which_idx <- function(n, diagonal, idx, type = c("and", "or"),
+                             add_idx_at_start = FALSE) {
+  type <- match.arg(type)
+  if (missing(diagonal)) diagonal = TRUE;
   .Call(C_m_vech_which_idx, n, diagonal, idx, type, add_idx_at_start)
 }
 m_vech_match_idx <- function(n, diagonal, idx) {
+  if (missing(diagonal)) diagonal = TRUE;
   .Call(C_m_vech_match_idx, n, diagonal, idx)
 }
 m_is_diagonal <- function(A) {
