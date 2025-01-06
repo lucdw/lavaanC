@@ -82,15 +82,6 @@ extern "C" {
         }
       }
       break;
-    case 'N':
-      for (int j = 0; j < n2; j++) {
-        for (int k = 0; k < n1; k++) {
-          werk = right[k + m2 * j];
-          for (int i = 0; i < m1; i++)
-            ret[j * m1 + i] += werk * left[i + m1 * k];
-        }
-      }
-      break;
     case 'R':
       for (int j = 0; j < n2; j++) {
         for (int k = 0; k < n1; k++) {
@@ -99,6 +90,15 @@ extern "C" {
             for (int i = 0; i < m1; i++)
               ret[j * m1 + i] += werk * left[i + m1 * k];
           }
+        }
+      }
+      break;
+    default:
+      for (int j = 0; j < n2; j++) {
+        for (int k = 0; k < n1; k++) {
+          werk = right[k + m2 * j];
+          for (int i = 0; i < m1; i++)
+            ret[j * m1 + i] += werk * left[i + m1 * k];
         }
       }
       break;
@@ -123,15 +123,6 @@ extern "C" {
     double* ret = REAL(retval);
     double werk = 0.0;
     switch (spa) {
-    case 'N':
-      for (int j = 0; j < n2; j++) {
-        for (int i = 0; i < n1; i++) {
-          werk = 0.0;
-          for (int k = 0; k < m2; k++) werk += left[i * m1 + k] * right[j * m2 + k];
-          ret[j * n1 + i] = werk;
-        }
-      }
-      break;
     case 'L':
       for (int k = 0; k < n1 * n2; k++) ret[k] = 0.0;
       for (int i = 0; i < n1; i++) {
@@ -158,6 +149,15 @@ extern "C" {
         }
       }
       break;
+    default:
+      for (int j = 0; j < n2; j++) {
+        for (int i = 0; i < n1; i++) {
+          werk = 0.0;
+          for (int k = 0; k < m2; k++) werk += left[i * m1 + k] * right[j * m2 + k];
+          ret[j * n1 + i] = werk;
+        }
+      }
+      break;
     }
     UNPROTECT(1);
     return retval;
@@ -180,15 +180,6 @@ extern "C" {
     double werk = 0.0;
     for (int k = 0; k < m1 * m2; k++) ret[k] = 0.0;
     switch (spa) {
-    case 'N':
-      for (int k = 0; k < n1; k++) {
-        for (int j = 0; j < m2; j++) {
-          werk = right[k * m2 + j];
-          for (int i = 0; i < m1; i++)
-            ret[j * m1 + i] += left[k * m1 + i] * werk;
-        }
-      }
-      break;
     case 'R':
       for (int k = 0; k < n1; k++) {
         for (int j = 0; j < m2; j++) {
@@ -209,6 +200,15 @@ extern "C" {
             for (int j = 0; j < m2; j++)
               ret[j * m1 + i] += right[k * m2 + j] * werk;
           }
+        }
+      }
+      break;
+    default:
+      for (int k = 0; k < n1; k++) {
+        for (int j = 0; j < m2; j++) {
+          werk = right[k * m2 + j];
+          for (int i = 0; i < m1; i++)
+            ret[j * m1 + i] += left[k * m1 + i] * werk;
         }
       }
       break;
