@@ -82,7 +82,7 @@ extern "C" {
         }
       }
       break;
-    case ' ':
+    case 'N':
       for (int j = 0; j < n2; j++) {
         for (int k = 0; k < n1; k++) {
           werk = right[k + m2 * j];
@@ -123,7 +123,7 @@ extern "C" {
     double* ret = REAL(retval);
     double werk = 0.0;
     switch (spa) {
-    case ' ':
+    case 'N':
       for (int j = 0; j < n2; j++) {
         for (int i = 0; i < n1; i++) {
           werk = 0.0;
@@ -180,7 +180,7 @@ extern "C" {
     double werk = 0.0;
     for (int k = 0; k < m1 * m2; k++) ret[k] = 0.0;
     switch (spa) {
-    case ' ':
+    case 'N':
       for (int k = 0; k < n1; k++) {
         for (int j = 0; j < m2; j++) {
           werk = right[k * m2 + j];
@@ -663,7 +663,7 @@ extern "C" {
   }
 
   SEXP m_diagh_idx(SEXP n) {
-    // return the *vech* indices of the diagonal elements of 
+    // return the *vech* indices of the diagonal elements of
     // a symmetric matrix of size 'n'
     int nn = getint(n);
     SEXP retval = PROTECT(Rf_allocVector(INTSXP, nn));
