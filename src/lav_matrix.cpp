@@ -3,14 +3,18 @@
 #include <Rinternals.h>
 
 inline void getdim(SEXP M, int& m, int& n, bool checkdouble = TRUE) {
-  if (!Rf_isMatrix(M)) Rf_error("Argument is not a matrix!");
   if (!Rf_isReal(M)) {
     if (checkdouble) Rf_error("Matrix argument is not double!");
     if (!Rf_isInteger(M)) Rf_error("Matrix argument is not numeric!");
   }
-  SEXP u = Rf_getAttrib(M, R_DimSymbol);
-  m = INTEGER(u)[0];
-  n = INTEGER(u)[1];
+  if (!Rf_isMatrix(M)) { // one-dimensional array ==> column vector
+    m = LENGTH(M);
+    n = 1;
+  } else {
+    SEXP u = Rf_getAttrib(M, R_DimSymbol);
+    m = INTEGER(u)[0];
+    n = INTEGER(u)[1];
+  }
 }
 inline bool getbool(SEXP B) {
   if (Rf_length(B) != 1) Rf_error("Boolean must have length 1!");
@@ -59,17 +63,37 @@ extern "C" {
     // boost performance by indicating that one of the matrices is sparse.
     // returns mat1 x mat2, sparse is 'L' to indicate mat1 is sparse,
     // 'R' to indicate mat2 is sparse
-   char spa = getchar(sparse);
+    // sparse is ignored if the left matrix is a row matrix or the right
+    // matrix is a column matrix.
+    char spa = getchar(sparse);
     int m1, n1, m2, n2;
     getdim(mat1, m1, n1);
     getdim(mat2, m2, n2);
-    if (n1 != m2) Rf_error("matrices not conforming");
+    if (n1 != m2) {
+      if (n1 == 1 && m1 == m2) { // switch to row-vector
+        n1 = m1;
+        m1 = 1;
+      } else {
+        if (n2 == 1 && n1 == 1) {
+          n2 = m2;
+          m2 = 1;
+        } else {
+          Rf_error("matrices not conforming");
+        }
+      }
+    }
     SEXP retval = PROTECT(Rf_allocMatrix(REALSXP, m1, n2));
     double* left = REAL(mat1);
     double* right = REAL(mat2);
     double* ret = REAL(retval);
     double werk = 0.0;
     for (int k = 0; k < m1 * n2; k++) ret[k] = 0.0;
+    if (m1 == 1) {             // check for special cases
+      if (n2 == 1) spa = 'x';  // left is row-matrix, right is column matrix
+      else spa = 'l';          // left is row-matrix
+    } else {
+      if (n2 == 1) spa = 'r';  // right is column matrix
+    }
     switch (spa) {
     case 'L':
       for (int k = 0; k < n1; k++) {
@@ -93,6 +117,23 @@ extern "C" {
         }
       }
       break;
+    case 'l':
+      for (int j = 0; j < n2; j++) {
+        for (int k = 0; k < n1; k++) {
+          ret[j] += right[k + m2 * j] * left[k];
+        }
+      }
+      break;
+    case 'r':
+      for (int k = 0; k < n1; k++) {
+        werk = right[k];
+        for (int i = 0; i < m1; i++)
+          ret[i] += werk * left[i + m1 * k];
+      }
+      break;
+    case 'x':
+      for (int k = 0; k < n1; k++) ret[0] += right[k] * left[k];
+      break;
     default:
       for (int j = 0; j < n2; j++) {
         for (int k = 0; k < n1; k++) {
@@ -112,16 +153,43 @@ extern "C" {
     // boost performance by indicating that one of the matrices is sparse.
     // returns transpose(mat1) x mat2, sparse is 'L' to indicate mat1 is sparse,
     // 'R' to indicate mat2 is sparse
-   char spa = getchar(sparse);
+    // sparse is ignored if the left matrix is a column matrix or the right
+    // matrix is a column matrix.
+    char spa = getchar(sparse);
     int m1, n1, m2, n2;
     getdim(mat1, m1, n1);
     getdim(mat2, m2, n2);
-    if (m1 != m2) Rf_error("matrices not conforming");
+    if (m1 != m2) {
+      if (n1 == 1 && m2 == 1) {
+        n1 = m1;
+        m1 = 1;
+      } else {
+        if (n2 == 1 && m1 == 1) {
+          n2  = m2;
+          m2 = 1;
+        } else {
+          if (n1 == 1 && n2 == 1) {
+            n1 = m1;
+            m1 = 1;
+            n2  = m2;
+            m2 = 1;
+          } else {
+            Rf_error("matrices not conforming");
+          }
+        }
+      }
+    }
     SEXP retval = PROTECT(Rf_allocMatrix(REALSXP, n1, n2));
     double* left = REAL(mat1);
     double* right = REAL(mat2);
     double* ret = REAL(retval);
     double werk = 0.0;
+    if (n1 == 1) {             // check for special cases
+      if (n2 == 1) spa = 'x';  // left is column matrix, right is column matrix
+      else spa = 'l';          // left is column matrix
+    } else {
+      if (n2 == 1) spa = 'r';  // right is column matrix
+    }
     switch (spa) {
     case 'L':
       for (int k = 0; k < n1 * n2; k++) ret[k] = 0.0;
@@ -149,6 +217,25 @@ extern "C" {
         }
       }
       break;
+    case 'l':
+      for (int j = 0; j < n2; j++) {
+        werk = 0.0;
+        for (int k = 0; k < m2; k++) werk += left[k] * right[j * m2 + k];
+        ret[j] = werk;
+      }
+      break;
+    case 'r':
+      for (int i = 0; i < n1; i++) {
+        werk = 0.0;
+        for (int k = 0; k < m2; k++) werk += left[i * m1 + k] * right[k];
+        ret[i] = werk;
+      }
+      break;
+    case 'x':
+      werk = 0.0;
+      for (int k = 0; k < m2; k++) werk += left[k] * right[k];
+      ret[0] = werk;
+      break;
     default:
       for (int j = 0; j < n2; j++) {
         for (int i = 0; i < n1; i++) {
@@ -168,17 +255,37 @@ extern "C" {
     // boost performance by indicating that one of the matrices is sparse.
     // returns mat1 x transpose(mat2), sparse is 'L' to indicate mat1 is sparse,
     // 'R' to indicate mat2 is sparse
-   char spa = getchar(sparse);
+    // sparse is ignored if the left matrix is a row matrix or the right
+    // matrix is a row matrix.
+    char spa = getchar(sparse);
     int m1, n1, m2, n2;
     getdim(mat1, m1, n1);
     getdim(mat2, m2, n2);
-    if (n1 != n2) Rf_error("matrices not conforming");
+    if (n1 != n2) {
+      if (n1 == 1 && m1 == n2) {
+        n1 = m1;
+        m1 = 1;
+      } else {
+        if (n2 == 1 && m2 == n1) {
+          n2 = m2;
+          m2 = 1;
+        } else {
+          Rf_error("matrices not conforming");
+        }
+      }
+    }
     SEXP retval = PROTECT(Rf_allocMatrix(REALSXP, m1, m2));
     double* left = REAL(mat1);
     double* right = REAL(mat2);
     double* ret = REAL(retval);
     double werk = 0.0;
     for (int k = 0; k < m1 * m2; k++) ret[k] = 0.0;
+    if (m1 == 1) {            // check for special cases
+      if (m2 == 1) spa = 'x'; // left and right are row matrices
+      else spa= 'l';          // left is row matrix
+    } else {
+      if (m2 == 1) spa = 'r'; // right is row matrix
+    }
     switch (spa) {
     case 'R':
       for (int k = 0; k < n1; k++) {
@@ -202,6 +309,23 @@ extern "C" {
           }
         }
       }
+      break;
+    case 'l':
+      for (int k = 0; k < n1; k++) {
+        for (int j = 0; j < m2; j++) {
+          ret[j] += left[k] * right[k * m2 + j];
+        }
+      }
+      break;
+    case 'r':
+      for (int k = 0; k < n1; k++) {
+          werk = right[k];
+          for (int i = 0; i < m1; i++)
+            ret[i] += left[k * m1 + i] * werk;
+      }
+      break;
+    case 'x':
+      for (int k = 0; k < n1; k++) ret[0] += left[k] * right[k];
       break;
     default:
       for (int k = 0; k < n1; k++) {

@@ -4,23 +4,36 @@ parse_model_string <- function(model.syntax = "", debug = FALSE) {
 }
 m_prod <- function(mat1, mat2, sparse = c("N", "L", "R")) {
   sparse <- match.arg(sparse)
+  if (!is.double(mat1)) storage.mode(mat1) <- "double"
+  if (!is.double(mat2)) storage.mode(mat2) <- "double"
   .Call(C_m_prod, mat1, mat2, sparse)
 }
 m_crossprod <- function(mat1, mat2, sparse = c("N", "L", "R")) {
   sparse <- match.arg(sparse)
+  if (!is.double(mat1)) storage.mode(mat1) <- "double"
+  if (!is.double(mat2)) storage.mode(mat2) <- "double"
   .Call(C_m_crossprod, mat1, mat2, sparse)
 }
 m_tcrossprod <- function(mat1, mat2, sparse = c("N", "L", "R")) {
   sparse <- match.arg(sparse)
+  if (!is.double(mat1)) storage.mode(mat1) <- "double"
+  if (!is.double(mat2)) storage.mode(mat2) <- "double"
   .Call(C_m_tcrossprod, mat1, mat2, sparse)
 }
 m_prod_left_diag <- function(mat, dg) {
+  if (!is.double(mat)) storage.mode(mat) <- "double"
+  if (!is.double(dg)) storage.mode(dg) <- "double"
   .Call(C_m_prod_left_diag, mat, dg)
 }
 m_prod_right_diag <- function(mat, dg) {
+  if (!is.double(mat)) storage.mode(mat) <- "double"
+  if (!is.double(dg)) storage.mode(dg) <- "double"
   .Call(C_m_prod_right_diag, mat, dg)
 }
 m_sandwich_diag <- function(mat1, mat2, dg) {
+  if (!is.double(mat1)) storage.mode(mat1) <- "double"
+  if (!is.double(mat2)) storage.mode(mat2) <- "double"
+  if (!is.double(dg)) storage.mode(dg) <- "double"
   .Call(C_m_sandwich_diag, mat1, mat2, dg)
 }
 m_vecr <- function(A) {

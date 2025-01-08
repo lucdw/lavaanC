@@ -39,8 +39,11 @@ in \code{dg}.
 The function \code{m_sandwich_diag} returns the product \eqn{mat1 \times  diag(dg) \times mat2}.
 }
 \note{
-All matrices and vectors given to these routines must be numeric, \strong{not} integer or logical!
+If a vector is given where a matrix is expected, it is converted to a column matrix.
+If a column matrix is involved in a check for comformability of matrices and non-conformability
+can be remedied by turning the column matrix into a row matrix, this is done.
 }
+
 \examples{
 # sparse matrix (85\% zeroes) 6 x 20
 m1 <- matrix(sample(c(rnorm(15L), rep(0.0, 85L)), 120, TRUE), ncol = 20)
