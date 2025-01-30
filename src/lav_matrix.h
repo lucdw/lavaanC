@@ -50,3 +50,6 @@ SEXP m_commutation_pre_post(SEXP A);
 SEXP m_kronecker_dup_pre_post(SEXP A, SEXP B, SEXP multiplicator);
 SEXP m_kronecker_dup_cor_pre_post(SEXP A, SEXP B, SEXP multiplicator);
 SEXP m_kronecker_dup_ginv_pre_post(SEXP A, SEXP B, SEXP multiplicator);
+SEXP m_kronecker_cols(SEXP A, SEXP B, SEXP idx);
+SEXP m_kronecker_diagright_cols(SEXP A, SEXP n, SEXP idx);
+SEXP m_kronecker_diagleft_cols(SEXP B, SEXP n, SEXP idx);

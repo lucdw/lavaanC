@@ -7,6 +7,9 @@
 \alias{m_kronecker_dup_pre_post}
 \alias{m_kronecker_dup_cor_pre_post}
 \alias{m_kronecker_dup_ginv_pre_post}
+\alias{m_kronecker_cols}
+\alias{m_kronecker_diagright_cols}
+\alias{m_kronecker_diagleft_cols}
 \title{Functions related to the Kronecker product of matrices}
 \description{
 The commutation functions concern matrices which enable to interchange (\sQuote{commute}) the two matrices of a Kronecker product.
@@ -19,7 +22,10 @@ m_commutation_post(A);
 m_commutation_pre_post(A);
 m_kronecker_dup_pre_post(A, B = NULL, multiplicator = 1.0);
 m_kronecker_dup_cor_pre_post(A, B = NULL, multiplicator = 1.0);
-m_kronecker_dup_ginv_pre_post(A, B = NULL, multiplicator = 1.0)
+m_kronecker_dup_ginv_pre_post(A, B = NULL, multiplicator = 1.0);
+m_kronecker_cols(A, B, idx);
+m_kronecker_diagright_cols(A, n, idx);
+m_kronecker_diagleft_cols(B, n, idx);
 }
 \value{
 \code{m_commutation} returns the \eqn{mn \times mn} commutation matrix \eqn{K_{mn}}.
@@ -54,6 +60,7 @@ Important property: it allows us to transform a vec of a Kronecker product
 \item{n}{Given dimension}
 \item{m}{Given dimension}
 \item{multiplicator}{scalar double to multiply the result with}
+\item{idx}{Given column indexes}
 }
 \examples{
 m_commutation(3L, 4L)

@@ -52,6 +52,9 @@ static const R_CallMethodDef callmethods[] = {
   {"m_kronecker_dup_pre_post",     (DL_FUNC) &m_kronecker_dup_pre_post,     3},
   {"m_kronecker_dup_cor_pre_post", (DL_FUNC) &m_kronecker_dup_cor_pre_post, 3},
   {"m_kronecker_dup_ginv_pre_post",(DL_FUNC) &m_kronecker_dup_ginv_pre_post,3},
+  {"m_kronecker_cols",             (DL_FUNC) &m_kronecker_cols,             3},
+  {"m_kronecker_diagright_cols",   (DL_FUNC) &m_kronecker_diagright_cols,   3},
+  {"m_kronecker_diagleft_cols",    (DL_FUNC) &m_kronecker_diagleft_cols,    3},
   {NULL, NULL, 0}
 };
 

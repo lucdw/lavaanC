@@ -168,11 +168,20 @@ m_kronecker_dup_cor_pre_post <- function(A, B = NULL, multiplicator = 1.0) {
     .Call(C_m_kronecker_dup_cor_pre_post, A, B, multiplicator)
   }
 }
-m_kronecker_dup_ginv_pre_post<- function(A, B = NULL, multiplicator = 1.0) {
+m_kronecker_dup_ginv_pre_post <- function(A, B = NULL, multiplicator = 1.0) {
   if (!is.double(multiplicator)) multiplicator <- as.double(multiplicator)
   if (is.null(B)) {
     .Call(C_m_kronecker_dup_ginv_pre_post, A, A, multiplicator)
   } else {
     .Call(C_m_kronecker_dup_ginv_pre_post, A, B, multiplicator)
   }
+}
+m_kronecker_cols <- function(A, B, idx) {
+  .Call(C_m_kronecker_cols, A, B, as.integer(idx))
+}
+m_kronecker_diagright_cols <- function(A, n, idx) {
+  .Call(C_m_kronecker_diagright_cols, A, as.integer(n), as.integer(idx))
+}
+m_kronecker_diagleft_cols <- function(B, n, idx) {
+  .Call(C_m_kronecker_diagleft_cols, B, as.integer(n), as.integer(idx))
 }

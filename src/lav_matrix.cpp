@@ -35,16 +35,6 @@ inline int getint(SEXP N, bool checkpositive = TRUE) {
   Rf_error("Only numeric and logical types accepted as integer!");
 }
 
-// static SEXP select(SEXP inarray, SEXP indices) { // for internal use in C++ only
-//   int n = LENGTH(indices);
-//   int* ind = INTEGER(indices);
-//   double* inarr = REAL(inarray);
-//   SEXP x = PROTECT(Rf_allocVector(REALSXP, n));
-//   double* xx = REAL(x);
-//   for (int j = 0; j < n; j++) xx[j] = inarr[ind[j]];
-//   UNPROTECT(1);
-//   return x;
-// }
 inline char getchar(SEXP charin, char dflt = ' ') {
   if (!Rf_isNull(charin)) {
     if (Rf_isString(charin)) {
@@ -55,6 +45,15 @@ inline char getchar(SEXP charin, char dflt = ' ') {
     }
   }
   return dflt;
+}
+
+inline SEXP DoubleMatrix(int m, int n, double u = 0.0) {
+  SEXP M = PROTECT(Rf_allocMatrix(REALSXP, m, n));
+  double* MM = REAL(M);
+  int mn = m * n;
+  for (int i = 0; i < mn; i++) MM[i] = u;
+  UNPROTECT(1);
+  return M;
 }
 
 extern "C" {
@@ -82,12 +81,11 @@ extern "C" {
         }
       }
     }
-    SEXP retval = PROTECT(Rf_allocMatrix(REALSXP, m1, n2));
+    SEXP retval = PROTECT(DoubleMatrix(m1, n2));
     double* left = REAL(mat1);
     double* right = REAL(mat2);
     double* ret = REAL(retval);
     double werk = 0.0;
-    for (int k = 0; k < m1 * n2; k++) ret[k] = 0.0;
     if (m1 == 1) {             // check for special cases
       if (n2 == 1) spa = 'x';  // left is row-matrix, right is column matrix
       else spa = 'l';          // left is row-matrix
@@ -179,7 +177,7 @@ extern "C" {
         }
       }
     }
-    SEXP retval = PROTECT(Rf_allocMatrix(REALSXP, n1, n2));
+    SEXP retval = PROTECT(DoubleMatrix(n1, n2));
     double* left = REAL(mat1);
     double* right = REAL(mat2);
     double* ret = REAL(retval);
@@ -192,7 +190,6 @@ extern "C" {
     }
     switch (spa) {
     case 'L':
-      for (int k = 0; k < n1 * n2; k++) ret[k] = 0.0;
       for (int i = 0; i < n1; i++) {
         for (int k = 0; k < m2; k++) {
           werk = left[i * m1 + k];
@@ -205,7 +202,6 @@ extern "C" {
       }
       break;
     case 'R':
-      for (int k = 0; k < n1 * n2; k++) ret[k] = 0.0;
       for (int j = 0; j < n2; j++) {
         for (int k = 0; k < m2; k++) {
           werk = right[j * m2 + k];
@@ -274,12 +270,11 @@ extern "C" {
         }
       }
     }
-    SEXP retval = PROTECT(Rf_allocMatrix(REALSXP, m1, m2));
+    SEXP retval = PROTECT(DoubleMatrix(m1, m2));
     double* left = REAL(mat1);
     double* right = REAL(mat2);
     double* ret = REAL(retval);
     double werk = 0.0;
-    for (int k = 0; k < m1 * m2; k++) ret[k] = 0.0;
     if (m1 == 1) {            // check for special cases
       if (m2 == 1) spa = 'x'; // left and right are row matrices
       else spa= 'l';          // left is row matrix
@@ -348,7 +343,7 @@ extern "C" {
     getdim(A, m, n);
     int lenD = LENGTH(D);
     if (lenD != m) Rf_error("matrix and vector not conformable");
-    SEXP retval = PROTECT(Rf_allocMatrix(REALSXP, m, n));
+    SEXP retval = PROTECT(DoubleMatrix(m, n));
     double* x = REAL(retval);
     double* AA = REAL(A);
     double* DD = REAL(D);
@@ -366,7 +361,7 @@ extern "C" {
     getdim(A, m, n);
     int lenD = LENGTH(D);
     if (lenD != n) Rf_error("matrix and vector not conformable");
-    SEXP retval = PROTECT(Rf_allocMatrix(REALSXP, m, n));
+    SEXP retval = PROTECT(DoubleMatrix(m, n));
     double* x = REAL(retval);
     double* AA = REAL(A);
     double* DD = REAL(D);
@@ -389,13 +384,12 @@ extern "C" {
     getdim(B, m2, n2);
     int lenD = LENGTH(D);
     if (n1 != m2 || n1 != lenD) Rf_error("matrices or vector not conforming");
-    SEXP retval = PROTECT(Rf_allocMatrix(REALSXP, m1, n2));
+    SEXP retval = PROTECT(DoubleMatrix(m1, n2));
     double* x = REAL(retval);
     double* AA = REAL(A);
     double* BB = REAL(B);
     double* DD = REAL(D);
     double werk;
-    for (int k = 0; k < m1 * n2; k++) x[k] = 0.0;
     for (int j = 0; j < n2; j++) {
       for (int k = 0; k < n1; k++) {
         werk = DD[k] * BB[k + m2 * j];
@@ -714,7 +708,7 @@ extern "C" {
     int n = (int)(0.01 + (sqrt(1 + 8.0 * lengte) - 1)/ 2);
     if (lengte * 2 != n * (n + 1)) Rf_error("length must equal n * (n + 1) / 2");
     if (!diag) n++;
-    SEXP retval = PROTECT(Rf_allocMatrix(REALSXP, n, n));
+    SEXP retval = PROTECT(DoubleMatrix(n, n));
     double* rvd = REAL(retval);
     double* xx = REAL(x);
     int k = 0;
@@ -748,7 +742,7 @@ extern "C" {
     int n = (int)(0.01 + (sqrt(1 + 8.0 * lengte) - 1)/ 2);
     if (lengte * 2 != n * (n + 1)) Rf_error("length must equal n * (n + 1) / 2");
     if (!diag) n++;
-    SEXP retval = PROTECT(Rf_allocMatrix(REALSXP, n, n));
+    SEXP retval = PROTECT(DoubleMatrix(n, n));
     double* rvd = REAL(retval);
     double* xx = REAL(x);
     int k = 0;
@@ -1026,7 +1020,7 @@ extern "C" {
     while (n * n < m1) n++;
     int n2 = n * n;
     int nstar = (n * (n + 1)) / 2;
-    SEXP x = PROTECT(Rf_allocMatrix(REALSXP, nstar, n1));
+    SEXP x = PROTECT(DoubleMatrix(nstar, n1));
     double* xx = REAL(x);
     double* AA = REAL(A);
     for (int k = 0; k < n1; k++) {
@@ -1065,7 +1059,7 @@ extern "C" {
     while (n * n < m1) n++;
     int n2 = n * n;
     int nstar = (n * (n - 1)) / 2;
-    SEXP x = PROTECT(Rf_allocMatrix(REALSXP, nstar, n1));
+    SEXP x = PROTECT(DoubleMatrix(nstar, n1));
     double* xx = REAL(x);
     double* AA = REAL(A);
     for (int k = 0; k < n1; k++) {
@@ -1101,7 +1095,7 @@ extern "C" {
     if (n1 > 100) n = 10;
     while (n * n < n1) n++;
     int nstar = (n * (n + 1)) / 2;
-    SEXP x = PROTECT(Rf_allocMatrix(REALSXP, m1, nstar));
+    SEXP x = PROTECT(DoubleMatrix(m1, nstar));
     double* xx = REAL(x);
     double* AA = REAL(A);
     for (int j = 0; j < n; j++) {
@@ -1139,7 +1133,7 @@ extern "C" {
     if (n1 > 100) n = 10;
     while (n * n < n1) n++;
     int nstar = (n * (n - 1)) / 2;
-    SEXP x = PROTECT(Rf_allocMatrix(REALSXP, m1, nstar));
+    SEXP x = PROTECT(DoubleMatrix(m1, nstar));
     double* xx = REAL(x);
     double* AA = REAL(A);
     for (int j = 0; j < n; j++) {
@@ -1169,7 +1163,7 @@ extern "C" {
     while (n * n < m1) n++;
     int n2 = n * n;
     int nstar = (n * (n + 1)) / 2;
-    SEXP x = PROTECT(Rf_allocMatrix(REALSXP, nstar, nstar));
+    SEXP x = PROTECT(DoubleMatrix(nstar, nstar));
     double* xx = REAL(x);
     double* AA = REAL(A);
     for (int j2 = 0; j2 < n; j2++) {
@@ -1208,7 +1202,7 @@ extern "C" {
     while (n * n < m1) n++;
     int n2 = n * n;
     int nstar = (n * (n - 1)) / 2;
-    SEXP x = PROTECT(Rf_allocMatrix(REALSXP, nstar, nstar));
+    SEXP x = PROTECT(DoubleMatrix(nstar, nstar));
     double* xx = REAL(x);
     double* AA = REAL(A);
     for (int j2 = 0; j2 < n; j2++) {
@@ -1242,7 +1236,7 @@ extern "C" {
     int nn = getint(n);
     int nstar = nn * (nn + 1) / 2;
     int n2 = nn * nn;
-    SEXP x = PROTECT(Rf_allocMatrix(REALSXP, nstar, n2));
+    SEXP x = PROTECT(DoubleMatrix(nstar, n2));
     double* xx = REAL(x);
     for (int k = 0; k < nstar * n2; k++) xx[k] = 0;
     for (int j = 0; j < nn; j++) {
@@ -1272,7 +1266,7 @@ extern "C" {
     while (n * n < m1) n++;
     int n2 = n * n;
     int nstar = (n * (n + 1)) / 2;
-    SEXP x = PROTECT(Rf_allocMatrix(REALSXP, nstar, nstar));
+    SEXP x = PROTECT(DoubleMatrix(nstar, nstar));
     double* xx = REAL(x);
     double* AA = REAL(A);
     for (int j2 = 0; j2 < n; j2++) {
@@ -1326,9 +1320,8 @@ extern "C" {
     int mm = getint(m);
     int nn = getint(n);
     int p = mm * nn;
-    SEXP x = PROTECT(Rf_allocMatrix(REALSXP, p, p));
+    SEXP x = PROTECT(DoubleMatrix(p, p));
     double* xx = REAL(x);
-    for (int i = 0; i < p * p; i++) xx[i] = 0.0;
     for (int i = 0; i < mm; i++) {
       for (int j = 0; j < nn; j++) {
         xx[i * nn + j + p * (j * mm + i )] = 1.0;
@@ -1349,7 +1342,7 @@ extern "C" {
     if (n2 > 100) n = 10;
     while (n * n < n2) n++;
     if (n2 != n * n) Rf_error("Number of rows of A must be a complete square!");
-    SEXP x = PROTECT(Rf_allocMatrix(REALSXP, n2, c));
+    SEXP x = PROTECT(DoubleMatrix(n2, c));
     double* xx = REAL(x);
     double* AA = REAL(A);
     for (int cc = 0; cc < c; cc++) {
@@ -1374,7 +1367,7 @@ extern "C" {
     if (n2 > 100) n = 10;
     while (n * n < n2) n++;
     if (n2 != n * n) Rf_error("Number of cols of A must be a complete square!");
-    SEXP x = PROTECT(Rf_allocMatrix(REALSXP, c, n2));
+    SEXP x = PROTECT(DoubleMatrix(c, n2));
     double* xx = REAL(x);
     double* AA = REAL(A);
     for (int i = 0; i < n; i++) {
@@ -1400,7 +1393,7 @@ extern "C" {
     while (n * n < n2) n++;
     if (n2 != n * n) Rf_error("Number of cols of A must be a complete square!");
     if (c != n2) Rf_error("A must be a square matrix!");
-    SEXP x = PROTECT(Rf_allocMatrix(REALSXP, c, n2));
+    SEXP x = PROTECT(DoubleMatrix(c, n2));
     double* xx = REAL(x);
     double* AA = REAL(A);
     for (int i = 0; i < n; i++) {
@@ -1431,7 +1424,7 @@ extern "C" {
   if (m1 * m2 > 100) n = 10;
   while (n * n < m1 * m2) n++;
   int nstar = (n * (n + 1)) / 2;
-  SEXP x = PROTECT(Rf_allocMatrix(REALSXP, nstar, nstar));
+  SEXP x = PROTECT(DoubleMatrix(nstar, nstar));
   double* xx = REAL(x);
   double* AA = REAL(A);
   double* BB = REAL(B);
@@ -1493,7 +1486,7 @@ extern "C" {
   if (m1 * m2 > 100) n = 10;
   while (n * n < m1 * m2) n++;
   int nstar = (n * (n - 1)) / 2;
-  SEXP x = PROTECT(Rf_allocMatrix(REALSXP, nstar, nstar));
+  SEXP x = PROTECT(DoubleMatrix(nstar, nstar));
   double* xx = REAL(x);
   double* AA = REAL(A);
   double* BB = REAL(B);
@@ -1549,7 +1542,7 @@ extern "C" {
   if (m1 * m2 > 100) n = 10;
   while (n * n < m1 * m2) n++;
   int nstar = (n * (n + 1)) / 2;
-  SEXP x = PROTECT(Rf_allocMatrix(REALSXP, nstar, nstar));
+  SEXP x = PROTECT(DoubleMatrix(nstar, nstar));
   double* xx = REAL(x);
   double* AA = REAL(A);
   double* BB = REAL(B);
@@ -1600,5 +1593,76 @@ extern "C" {
   }
   UNPROTECT(1);
   return x;
+  }
+  SEXP m_kronecker_cols(SEXP A, SEXP B, SEXP idx) {
+  // Compute A %x% B [, idx, drop = FALSE]
+  // A = m1 x n1 matrix, B = m2 x n2 mtrix, idx = indices (all <= n1 * n2)
+    int m1;
+    int n1;
+    getdim(A, m1, n1);
+    int m2;
+    int n2;
+    getdim(B, m2, n2);
+    int idxl = LENGTH(idx);
+    int nrow = m1 * m2;
+    SEXP x = PROTECT(DoubleMatrix(nrow, idxl));
+    double* y = REAL(x);
+    double* AA = REAL(A);
+    double* BB = REAL(B);
+    int* ii = INTEGER(idx);
+    for (int kolom = 0; kolom < idxl; kolom++) {
+      int j = ii[kolom] - 1;
+      for (int i = 0; i < nrow; i++) {
+        y[kolom * nrow + i] = AA[(j/n2) * m1 + (i/m2)] * BB[(j%n2) * m2 + i%m2];
+      }
+    }
+    UNPROTECT(1);
+    return x;
+  }
+  SEXP m_kronecker_diagright_cols(SEXP A, SEXP n, SEXP idx) {
+  // compute A %x% diag(n) [, idx, drop = FALSE]
+  // A = m1 x n1 matrix, idx = indices (all <= n1 * n)
+  int m1;
+  int n1;
+  getdim(A, m1, n1);
+  int idxl = LENGTH(idx);
+  int* nvec = INTEGER(n);
+  int nn = nvec[0];
+  int nrow = m1 * nn;
+  SEXP x = PROTECT(DoubleMatrix(nrow, idxl));
+  double* y = REAL(x);
+  double* AA = REAL(A);
+  int* ii = INTEGER(idx);
+  for (int kolom = 0; kolom < idxl; kolom++) {
+    int j = ii[kolom] - 1;
+    for (int i = j%nn; i < nrow; i+=nn) {
+      y[kolom * nrow + i] = AA[(j/nn) * m1 + (i/nn)];
+    }
+  }
+  UNPROTECT(1);
+  return x;
+  }
+  SEXP m_kronecker_diagleft_cols(SEXP B, SEXP n, SEXP idx) {
+  // compute diag(dd) %x% B [,idx, drop = FALSE]
+  // B = m2 x n2 matrix, idx = indices (all <= n * n2)
+  int m2;
+  int n2;
+  getdim(B, m2, n2);
+  int idxl = LENGTH(idx);
+  int* nvec = INTEGER(n);
+  int nn = nvec[0];
+  int nrow = nn * m2;
+  SEXP x = PROTECT(DoubleMatrix(nrow, idxl));
+  double* y = REAL(x);
+  double* BB = REAL(B);
+  int* ii = INTEGER(idx);
+  for (int kolom = 0; kolom < idxl; kolom++) {
+      int j = ii[kolom] - 1;
+      for (int i = m2 * (j/n2); i < m2 * (1 + j/n2); i++) {
+        y[kolom * nrow + i] = BB[(j%n2) * m2 + i%m2];
+      }
+    }
+    UNPROTECT(1);
+    return x;
   }
 }
