@@ -4,7 +4,7 @@
             "name": "Win32",
             "includePath": [
                 "${workspaceFolder}/*",
-                "C:/Program Files/R/R-4.4.0/include"
+                "C:/Program Files/R/R-4.4.2/include"
             ],
             "defines": [
                 "_DEBUG",

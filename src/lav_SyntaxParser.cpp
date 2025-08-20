@@ -708,6 +708,29 @@ static TokenLL* lav_Tokenize(const char* modelsrc, int& nbf, int& error) {
 static int lav_InteractionTokens(TokenLL& formul) {
 	int CheckInteraction = 1;
 	int error = 0;
+// replace typ T_LAVAANOPERATOR by T_SYMBOL if text==":" and not the last
+//         typ T_LAVAANOPERATOR of the formula
+// replace typ T_LAVAANOPERATOR by T_SYMBOL if prior operator <> ":"
+  tokenp lastcolon = nullptr;
+  bool operatorfound = false;
+  for (tokenp curtok = formul.first; curtok != 0; curtok = curtok->next) {
+    if (curtok->typ == T_LAVAANOPERATOR) {
+      if (lastcolon != nullptr) {
+        lastcolon->typ = T_SYMBOL;
+        lastcolon = nullptr;
+      }
+      if (operatorfound) {
+        curtok->typ = T_SYMBOL;
+      } else {
+        if (strcmp(curtok->tekst, ":") == 0) {
+          lastcolon = curtok;
+        } else {
+          operatorfound = true;
+        }
+      }
+    }
+  }
+  // check if operator valid for interaction variables
 	for (tokenp curtok = formul.first; curtok != 0; curtok = curtok->next) {
 		if (curtok->typ == T_LAVAANOPERATOR) {
 			const string tmp[] = { ":", "==", "<", ">", ":=", "\a" };
@@ -794,7 +817,8 @@ static MonoFormule* lav_MonoFormulas(TokenLL* formules, int nbf, int& nbmf, int&
 		if (error) return nullptr;
 	}
 	/*	exactly 1 lavaan lavoperator per formula (error if none found)
-	count number of monoformules */
+	count number of monoformules
+	*/
 	for (int j = 0; j < nbf; j++) {
 		if (formules[j].first == nullptr) {
 			error = (int)(spe_progerror << 24) + __LINE__;
@@ -1702,7 +1726,10 @@ int lav_parse(parsresult& pr, const string model, int& errorpos, const string* r
 						pr.debuginfo += "\t";
 						mftokenp curtok = mf[j].first;
 						do {
+						  if (curtok->typ == T_LAVAANOPERATOR) pr.debuginfo += "|";
 							pr.debuginfo += curtok->tekst;
+							if (curtok->typ == T_LAVAANOPERATOR) pr.debuginfo += "|";
+							pr.debuginfo += " ";
 							curtok = curtok->next;
 						} while (curtok != nullptr);
 						pr.debuginfo += "\n";
