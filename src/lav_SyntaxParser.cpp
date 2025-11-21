@@ -281,6 +281,30 @@ string Modifier::to_string() const {
 	}
 	return sb;
 }
+bool Modifier::checkMixed() const {
+  modVar* mv = firstone;
+  int tiepes = 0;
+  while (mv != nullptr) {
+    switch (mv->GetType()) {
+    case Dbl:
+      tiepes = tiepes | 1;
+      break;
+    case Txt:
+      tiepes = tiepes | 2;
+      break;
+    case Expr:
+      tiepes = tiepes | 1;
+      break;
+    case Na:
+      tiepes = tiepes | 1;
+      break;
+    case Unknown:
+      break;
+    }
+    mv = mv->next;
+  }
+  return (tiepes == 3);
+}
 void Modifier::SetOwner(bool newstatus) { owner = newstatus; }
 Modifier::~Modifier() {
 	if (!owner) return;
@@ -1150,6 +1174,9 @@ static Modifier* lav_parse_get_modifier_r(MonoFormule mf, mftokenp from, mftoken
 				}
 				if (strcmp(toklab->next->tekst, ")") != 0) {
 					*error = (int)(spe_invalidvector << 24) + from->pos;
+				}
+				if (retval->checkMixed()) {
+				  *error = (int)(spe_mixedmod << 24) + from->pos;
 				}
 				return retval;
 			}

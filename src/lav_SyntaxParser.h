@@ -65,6 +65,7 @@ public:
 	void add(const char* x, int pos = 0);
 	void addNa(int pos = 0);
 	void addExpr(const char* x, int pos = 0);
+	bool checkMixed() const;
 	std::string to_string() const;
 	void SetOwner(bool newstatus);
 	~Modifier();
@@ -144,6 +145,7 @@ constexpr int spe_invalidmodsmb = 49   /* invalid modifier symbol (should be '*'
 constexpr int spe_invalidexpr = 50     /* invalid expression (only detectable in calling program) */;
 constexpr int spe_invalidexprtyp = 51  /* invalid type for expression (only detectable in calling program) */;
 constexpr int spe_lvlgrp = 52          /* groups cannot be nested within levels! */;
+constexpr int spe_mixedmod = 53        /* no mixed multigroup identifiers! */;
 /* Syntax Parser Warnings */;
 
 constexpr int spw_operatorblanks = 101   /* blanks in lavaan lavoperator is deprecated */;

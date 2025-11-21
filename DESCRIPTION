@@ -1,7 +1,7 @@
 Package: lavaanC
 Type: Package
 Title: Deliver Routines for lavaan written in C 
-Version: 0.1.0
+Version: 0.1.1
 Authors@R: c(person(given   = "Yves", family = "Rosseel",
                     role    = c("aut", "cre"),
                     email   = "Yves.Rosseel@UGent.be",
