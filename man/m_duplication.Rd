@@ -17,17 +17,17 @@ Functions for duplication, i.e. transforming \code{vech} to \code{vec}.
 \usage{
 m_duplication(n);
 m_duplication_cor(n);
-m_duplication_pre(A);
-m_duplication_cor_pre(A);
-m_duplication_post(A);
-m_duplication_cor_post(A);
-m_duplication_pre_post(A);
-m_duplication_cor_pre_post(A);
+m_duplication_pre(m_a);
+m_duplication_cor_pre(m_a);
+m_duplication_post(m_a);
+m_duplication_cor_post(m_a);
+m_duplication_pre_post(m_a);
+m_duplication_cor_pre_post(m_a);
 m_duplication_ginv(n);
-m_duplication_ginv_pre_post(A);
+m_duplication_ginv_pre_post(m_a);
 }
 \arguments{
-\item{A}{Matrix.}
+\item{m_a}{Matrix.}
 \item{n}{Given dimension}
 }
 \value{

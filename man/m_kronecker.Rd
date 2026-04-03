@@ -17,29 +17,29 @@ The kronecker_dup functions enable duplication of Kronecker products without com
 }
 \usage{
 m_commutation(m, n);
-m_commutation_pre(A);
-m_commutation_post(A);
-m_commutation_pre_post(A);
-m_kronecker_dup_pre_post(A, B = NULL, multiplicator = 1.0);
-m_kronecker_dup_cor_pre_post(A, B = NULL, multiplicator = 1.0);
-m_kronecker_dup_ginv_pre_post(A, B = NULL, multiplicator = 1.0);
-m_kronecker_cols(A, B, idx);
-m_kronecker_diagright_cols(A, n, idx);
-m_kronecker_diagleft_cols(B, n, idx);
+m_commutation_pre(m_a);
+m_commutation_post(m_a);
+m_commutation_pre_post(m_a);
+m_kronecker_dup_pre_post(m_a, m_b = NULL, multiplicator = 1.0);
+m_kronecker_dup_cor_pre_post(m_a, m_b = NULL, multiplicator = 1.0);
+m_kronecker_dup_ginv_pre_post(m_a, m_b = NULL, multiplicator = 1.0);
+m_kronecker_cols(m_a, m_b, idx);
+m_kronecker_diagright_cols(m_a, n, idx);
+m_kronecker_diagleft_cols(m_b, n, idx);
 }
 \value{
 \code{m_commutation} returns the \eqn{mn \times mn} commutation matrix \eqn{K_{mn}}.
 \code{m_commutation_pre}, \code{m_commutation_post} and \code{m_commutation_pre_post} return the
 given matrix pre-, post- or pre- and post-multplied with the commutation matrix \eqn{K_{nn}}.
 
-\code{m_kronecker_dup_...} return the corresponding products with the duplication matrix for \eqn{A \otimes B}, multiplied
+\code{m_kronecker_dup_...} return the corresponding products with the duplication matrix for \eqn{m_a \otimes m_b}, multiplied
 by the scalar \code{multiplicator}.
 }
 \details{
 The \eqn{mn \times mn} commutation matrix \eqn{K_{mn}} is a permutation matrix which
-transforms \eqn{vec(A)} into \eqn{vec(A^T)}.
+transforms \eqn{vec(m_a)} into \eqn{vec(m_a^T)}.
 
-\deqn{K_{mn} \times vec(A) = vec(A^T)}
+\deqn{K_{mn} \times vec(m_a) = vec(m_a^T)}
 
 Note: \eqn{K_{mn}} is a permutation matrix, so it is orthogonal: \eqn{K_{mn}^T = K_{mn}^{-1}} and
 \eqn{K_{nm} \times K_{mn} == I_{mn}}.
@@ -47,16 +47,16 @@ Note: \eqn{K_{mn}} is a permutation matrix, so it is orthogonal: \eqn{K_{mn}^T =
 It is called the \sQuote{commutation} matrix because it enables us to interchange
 the two matrices of a Kronecker product, e.g.
 
-\deqn{K_{pm} (A \otimes B) K_{nq} == (B \otimes A)}
+\deqn{K_{pm} (m_a \otimes m_b) K_{nq} == (m_b \otimes m_a)}
 
 Important property: it allows us to transform a vec of a Kronecker product
- into the Kronecker product of the vecs (if A is \eqn{m \times n} and B is \eqn{p \times q}):
+ into the Kronecker product of the vecs (if m_a is \eqn{m \times n} and m_b is \eqn{p \times q}):
 
-\deqn{vec(A \otimes B) == (I_n \otimes K_{qm} \otimes I_p)(vec A \otimes vec B)}
+\deqn{vec(m_a \otimes m_b) == (I_n \otimes K_{qm} \otimes I_p)(vec m_a \otimes vec m_b)}
 }
 \arguments{
-\item{A}{Matrix.}
-\item{B}{Matrix.}
+\item{m_a}{Matrix.}
+\item{m_b}{Matrix.}
 \item{n}{Given dimension}
 \item{m}{Given dimension}
 \item{multiplicator}{scalar double to multiply the result with}

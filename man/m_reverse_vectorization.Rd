@@ -15,11 +15,11 @@ m_vechr_reverse(x, diagonal);
 \item{diagonal}{Logical to indicate diagonal is present, , default value is \code{TRUE}}
 }
 \value{
-Given the output of vech(S), or vechru(S) which is identical, m_vech_reverse
-reconstructs S.
+Given the output of vech(m_s), or vechru(m_s) which is identical, m_vech_reverse
+reconstructs m_s.
 
-Given the output of vechr(S), or vechu(S) which is identical, m_vechr_reverse
-reconstructs S.
+Given the output of vechr(m_s), or vechu(m_s) which is identical, m_vechr_reverse
+reconstructs m_s.
 }
 \details{
 The length of vector x must equal \eqn{n \times (n + 1) / 2} for a certain integer \eqn{n > 0}.

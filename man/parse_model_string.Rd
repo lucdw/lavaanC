@@ -7,10 +7,10 @@ Returns the flat version as a list, with attributes modifiers, constraints and w
  or a numeric vector of length 2 with the error code and the position of the error.
 }
 \usage{
-parse_model_string(model.syntax = "", debug = FALSE)
+parse_model_string(model_syntax = "", debug = FALSE)
 }
 \arguments{
-\item{model.syntax}{A description of the user-specified model. Typically, the model
+\item{model_syntax}{A description of the user-specified model. Typically, the model
     is described using the lavaan model syntax.
 }
 \item{debug}{A logical to indicate if debug info is to be shown.}

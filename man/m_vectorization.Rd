@@ -10,15 +10,15 @@
 Functions to transform a matrix to a vector representation.
 }
 \usage{
-m_vecr(A);
-m_vech(S, diagonal);
-m_vechr(S, diagonal);
-m_vechu(S, diagonal);
-m_vechru(S, diagonal);
+m_vecr(m_a);
+m_vech(m_s, diagonal);
+m_vechr(m_s, diagonal);
+m_vechu(m_s, diagonal);
+m_vechru(m_s, diagonal);
 }
 \arguments{
-\item{A}{Matrix.}
-\item{S}{Symmetric matrix}
+\item{m_a}{Matrix.}
+\item{m_s}{Symmetric matrix}
 \item{diagonal}{logical to indicate diagonal elements should be included, default value is \code{TRUE}}
 }
 \value{

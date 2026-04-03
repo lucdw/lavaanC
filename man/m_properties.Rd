@@ -6,10 +6,10 @@
 Check matrix properties.
 }
 \usage{
-m_is_diagonal(A);
+m_is_diagonal(m_a);
 }
 \arguments{
-\item{A}{Matrix.}
+\item{m_a}{Matrix.}
 }
 \value{
 TRUE if the matrix is diagonal, FALSE if it isn't.
